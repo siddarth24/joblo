@@ -1,0 +1,7 @@
+.env
+.DS_Store
+linkedin_state.json
+convert_dotenv_to_toml.py
+.streamlit/secrets.toml
+linkedin_states/
+joblo-linkedin-auth/

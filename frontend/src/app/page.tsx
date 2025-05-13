@@ -4,12 +4,8 @@ import React, { useState, ChangeEvent, useCallback, useEffect, useRef } from 're
 import { ThemeProvider, useTheme } from 'next-themes';
 import { Toaster, toast } from 'sonner';
 
-// API client
-import { api } from '../services/api';
-
 // Types
-import { AppStep, JobInputUIMode, AtsScore, JobData } from '@/types';
-import { JobApplicationPayload } from '../types/api';
+import { AppStep, JobInputUIMode, AtsScore, JobData, ProcessingResult, ApiResponse } from '@/types';
 
 // Components
 import Header from '@/components/joblo/Header';
@@ -18,6 +14,12 @@ import KnowledgeBaseUploadScreen from '@/components/screens/KnowledgeBaseUploadS
 import LoadingScreen from '@/components/screens/LoadingScreen';
 import ResultsScreen from '@/components/screens/ResultsScreen';
 import ErrorScreen from '@/components/screens/ErrorScreen';
+
+// Services
+import { 
+  processJobApplication,
+  checkApiHealth
+} from '@/services/api';
 
 // --- Main Application Component ---
 const App: React.FC = () => {
@@ -47,23 +49,6 @@ const App: React.FC = () => {
       setTheme('dark');
     }
   }, [theme, setTheme]);
-
-  // Backend Health Check on Mount
-  useEffect(() => {
-    const checkBackendStatus = async () => {
-      toast.promise(api.healthCheck(), {
-        loading: 'Connecting to backend...',
-        success: (response) => {
-          if (response.success && response.data?.status === 'ok') {
-            return 'Backend connection established!';
-          }
-          return `Backend status: ${response.error || 'Unknown error'}`;
-        },
-        error: (err) => `Backend connection failed: ${err.message || 'Unknown error'}`,
-      });
-    };
-    checkBackendStatus();
-  }, []);
 
   // Handlers to be passed as props, memoized with useCallback
   const memoizedSetJobInputUIMode = useCallback((mode: JobInputUIMode) => setJobInputUIMode(mode), []);
@@ -119,18 +104,9 @@ const App: React.FC = () => {
     setAppStep('optional_kb_upload');
   }, [canSubmitInitial, resumeFile, jobInputUIMode, jobUrl, jobDescription]);
 
-  // --- Refined Processing Flow Callbacks ---
   const startFullProcessing = useCallback(async (skipKb: boolean = false) => {
-    if (!resumeFile) {
-      toast.error("No resume file selected. Please select a resume to proceed.");
-      setAppStep('initial_input'); // Go back if critical info is missing
-      return;
-    }
-
     setAppStep('loading');
-    setIsLoadingMessage('Initiating Full Analysis Protocol with Backend...');
-    
-    // Clear previous results
+    setIsLoadingMessage('Initializing Core Analysis...');
     setScrapedJobData(null); 
     setExtractedCvText(null); 
     setOriginalAts(null);
@@ -138,105 +114,168 @@ const App: React.FC = () => {
     setImprovedAts(null); 
     setDocxBytesBase64(null);
 
-    // Prepare payload for the API
-    const payload: JobApplicationPayload = { resumeFile };
-    if (jobInputUIMode === 'link' && jobUrl) {
-      payload.jobUrl = jobUrl;
-    } else if (jobInputUIMode === 'text' && jobDescription) {
-      payload.jobDescription = jobDescription;
-    } else if (jobInputUIMode === 'link' && !jobUrl) {
-        toast.error("Job URL is selected but no URL is provided.");
-        setAppStep('initial_input');
-        return;
-    } else if (jobInputUIMode === 'text' && !jobDescription) {
-        toast.error("Job Description is selected but no description is provided.");
-        setAppStep('initial_input');
-        return;
-    }
-
-
-    if (!skipKb && knowledgeBaseFiles.length > 0) {
-      payload.kbFiles = knowledgeBaseFiles;
-    }
+    const formData = new FormData();
+    if (jobInputUIMode === 'link') formData.append('jobUrl', jobUrl);
+    else formData.append('jobDescription', jobDescription);
+    if (resumeFile) formData.append('resumeFile', resumeFile);
+    if (!skipKb) knowledgeBaseFiles.forEach(file => formData.append('kbFiles', file));
     
     try {
-      setIsLoadingMessage('Transmitting data to backend for analysis...');
-      const response = await api.processJobApplication(payload);
-
-      if (response.success && response.data) {
-        toast.success(response.message || 'Processing successful!');
-        
-        // Update state with data from backend
-        setScrapedJobData(response.data.scrapedJobData);
-        setExtractedCvText(response.data.extractedCvText);
-        setOriginalAts(response.data.originalAts);
-        setImprovedResumeMarkdown(response.data.improvedResumeMarkdown);
-        setImprovedAts(response.data.improvedAts);
-        setDocxBytesBase64(response.data.docxBytesBase64);
-        
-        // Determine a good output filename
-        const jobTitle = response.data.scrapedJobData?.["Job Title"] || 'Job';
-        const company = response.data.scrapedJobData?.["Company"] || 'Company';
-        setOutputFilename(`${jobTitle}_${company}_Resume.docx`.replace(/[^a-zA-Z0-9_.-]/g, '_'));
-
-        setAppStep('results_job_data'); // Or whichever step is appropriate to show first results
-      } else {
-        toast.error(response.error || "Backend processing failed. Please try again.");
-        setAppStep('error');
+      setIsLoadingMessage('Deconstructing Job Posting & Parsing Resume...');
+      
+      const isHealthy = await checkApiHealth();
+      console.log('API health check:', isHealthy); // Keep for basic health check visibility
+      
+      if (!isHealthy) {
+        throw new Error("API service is currently unavailable. Please try again later.");
       }
-    } catch (error: unknown) {
-      toast.error(`An unexpected error occurred: ${error instanceof Error ? error.message : "Unknown error"}`);
-      setAppStep('error');
+
+      console.log('Sending process job application request');
+      const response = await processJobApplication(formData);
+      console.log('Process job application response:', response); // Keep for initial data visibility
+      
+      if (!response.success || !response.data) {
+        toast.error(response.error || "Failed to process application. Please check inputs and API logs.");
+        setAppStep('error');
+        return;
+      }
+      
+      const result = response.data as ProcessingResult;
+      console.log('Setting scraped job data:', result.jobData);
+      console.log('Setting extracted CV text (truncated):', 
+                result.extractedCvText ? result.extractedCvText.substring(0, 100) + '...' : 'none');
+      
+      setScrapedJobData(result.jobData);
+      setExtractedCvText(result.extractedCvText);
+      // The initial response should now contain the original ATS score directly from the backend
+      if (result.originalAts) {
+        console.log('Setting original ATS from initial processing:', result.originalAts);
+        setOriginalAts(result.originalAts);
+      } else {
+        // This case should ideally not happen if backend is structured correctly for initial ATS
+        console.warn('Original ATS score not found in initial process-job-application response.');
+        // Optionally, trigger an error or a specific state if original ATS is critical here
+      }
+
+      if (result.outputFilename) {
+        setOutputFilename(result.outputFilename);
+      } else {
+        setOutputFilename(`${result.jobData?.["Job Title"] || 'Job'}_${result.jobData?.["Company"] || 'Company'}_Resume.docx`);
+      }
+      
+      setAppStep('results_job_data'); 
+    } catch (error: any) { 
+      console.error('Process job application error:', error);
+      toast.error((error as Error).message || "System matrix destabilized during initial phase."); 
+      setAppStep('error'); 
     }
   }, [jobInputUIMode, jobUrl, jobDescription, resumeFile, knowledgeBaseFiles]);
 
   const handleProceedToCvPreview = useCallback(() => setAppStep('results_cv_preview'), []);
 
   const handleProceedToAtsOriginal = useCallback(async () => {
+    if (!scrapedJobData || !extractedCvText) {
+        toast.error("Missing job data or CV text for ATS analysis.");
+        setAppStep('error');
+        return;
+    }
     setAppStep('loading'); 
     setIsLoadingMessage('Calculating Pre-Enhancement ATS Signature...');
+    console.log('[CLIENT handleProceedToAtsOriginal] State before fetch:', { 
+      scrapedJobData: !!scrapedJobData,
+      extractedCvText: !!extractedCvText,
+      originalAts: originalAts // Log current originalAts state
+    });
     try {
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      const mockOriginalAts = { 
-        score: 62, 
-        summary: "Strong physics background, but lacks specific Q-Sharp project examples.", 
-        recommendations: ["Highlight Q-Sharp algorithm development experience.", "Add metrics for entanglement stability improvements achieved."] 
-      };
-      setOriginalAts(mockOriginalAts);
+      const formData = new FormData();
+      formData.append('jobData', JSON.stringify(scrapedJobData));
+      formData.append('cvText', extractedCvText || '');
+      
+      console.log('[CLIENT handleProceedToAtsOriginal] Sending ATS analysis request with jobData keys:', Object.keys(scrapedJobData || {}));
+      console.log('[CLIENT handleProceedToAtsOriginal] Sending CV text (length):', (extractedCvText || '').length);
+      
+      const response = await fetch('/api/analyze-ats', {
+        method: 'POST',
+        body: formData,
+      });
+      
+      const resultText = await response.text(); // Get text first to avoid issues with response.json() being called twice
+      console.log('[CLIENT handleProceedToAtsOriginal] Raw response text:', resultText);
+      const result = JSON.parse(resultText);
+      console.log('[CLIENT handleProceedToAtsOriginal] Parsed fetch result:', result);
+      
+      if (!result.success || !result.data?.atsScore || typeof result.data.atsScore !== 'object') {
+        console.error('[CLIENT handleProceedToAtsOriginal] ATS score data is invalid or missing. Result:', result);
+        toast.error(result.error || "Failed to analyze ATS score. Data missing or invalid from response.");
+        setAppStep('error');
+        return;
+      }
+      
+      console.log('[CLIENT handleProceedToAtsOriginal] Setting originalAts with:', result.data.atsScore);
+      setOriginalAts(result.data.atsScore);
       setAppStep('results_ats_original');
-    } catch (error: unknown) {
-      toast.error((error instanceof Error ? error.message : "Unknown error") || "ATS analysis failed."); 
+      console.log('[CLIENT handleProceedToAtsOriginal] State update calls made.');
+    } catch (error: any) { 
+      console.error('[CLIENT handleProceedToAtsOriginal] ATS analysis error:', error, error.stack);
+      toast.error((error as Error).message || "ATS analysis failed."); 
       setAppStep('error'); 
     }
-  }, []);
+  }, [scrapedJobData, extractedCvText, originalAts]); // Added originalAts to dependency array as it's logged, though not strictly necessary for the logic itself
   
   const handleProceedToGenerateResume = useCallback(async () => {
+    if (!scrapedJobData || !extractedCvText || !originalAts) {
+        toast.error("Missing required data (job, CV, or original ATS) to generate resume.");
+        setAppStep('error');
+        return;
+    }
     setAppStep('loading'); 
     setIsLoadingMessage('Engaging AI Core for Resume Synthesis...');
     try {
-      await new Promise(resolve => setTimeout(resolve, 2800));
-      const mockImprovedResume = `## Dr. Aris Thorne\n### Quantum Entanglement Specialist\n\n**Contact:** a.thorne@nexus.corp | Orbital Station Prime | Clearance: Gamma-7\n\n#### Quantum Communications Expert\nAccomplished Quantum Physicist with 7 years' experience specializing in quantum communication relays and entanglement stability. Proven ability to optimize relay performance using advanced Q-Sharp programming, achieving a 25% reduction in latency for Nexus Corp. Seeking to leverage expertise in entanglement principles to enhance Nexus Corp's interstellar communication network.\n\n#### Core Strengths\n- **Quantum Entanglement:** Relay Optimization, Stability Maintenance, Decoherence Mitigation\n- **Programming:** Q-Sharp (Advanced), Python (Quantum Libraries)\n- **Project Management:** Led 'Project Chimera' entanglement stability team (5 members)\n- **Clearance:** Active Gamma-7\n\n#### Professional Experience\n**Lead Quantum Physicist** | Nexus Corp | Orbital Station Prime | 2072 - Present\n- Developed and implemented novel Q-Sharp algorithms resulting in a **25% reduction in communication latency** across the primary relay network.\n- Managed entanglement stability for **Project Chimera**, maintaining uptime above 99.98%.\n- Authored 3 internal whitepapers on advanced entanglement protocols.`;
-      const mockImprovedAts = { 
-        score: 95, 
-        summary: "Excellent alignment. Q-Sharp experience and quantifiable achievements prominently featured.", 
-        recommendations: "Consider adding a brief 'Security Clearances' section if applicable beyond contact line." 
-      };
-      const mockDocxBase64 = "UEsDBBQAAAAIAAgAAAAAVVVVVQAAAAAAAAAAAAAAAAwAAAAvY29udGVudHMueG1sIKpsE...";
-      setImprovedResumeMarkdown(mockImprovedResume); 
-      setImprovedAts(mockImprovedAts); 
-      setDocxBytesBase64(mockDocxBase64);
+      const formData = new FormData();
+      formData.append('jobData', JSON.stringify(scrapedJobData));
+      formData.append('cvText', extractedCvText || '');
+      formData.append('atsScore', JSON.stringify(originalAts)); // Send original ATS for context
+      
+      knowledgeBaseFiles.forEach(file => formData.append('kbFiles', file));
+      
+      const response = await fetch('/api/generate-resume', { // This calls the Next.js API route
+        method: 'POST',
+        body: formData,
+      });
+      
+      const result = await response.json();
+      console.log('Generate resume response:', result); // For debugging
+
+      if (!result.success || !result.data) {
+        toast.error(result.error || "Failed to generate improved resume. Data missing from response.");
+        setAppStep('error');
+        return;
+      }
+      
+      setImprovedResumeMarkdown(result.data.improvedResumeMarkdown);
+      setImprovedAts(result.data.improvedAts); 
+      setDocxBytesBase64(result.data.docxBytesBase64);
+      if(result.data.outputFilename) setOutputFilename(result.data.outputFilename);
       setAppStep('results_resume_preview');
-    } catch (error: unknown) {
-      toast.error((error instanceof Error ? error.message : "Unknown error") || "AI synthesis encountered an anomaly."); 
+    } catch (error: any) { 
+      console.error('Resume generation error:', error);
+      toast.error((error as Error).message || "AI synthesis encountered an anomaly."); 
       setAppStep('error'); 
     }
-  }, []);
+  }, [scrapedJobData, extractedCvText, originalAts, knowledgeBaseFiles]);
 
   const handleDownloadDocx = useCallback(() => { 
     if (!docxBytesBase64) { 
       toast.error("DOCX data stream not available."); 
       return; 
     }
+    
+    // Check if we're dealing with mock data
+    if (docxBytesBase64.includes("(mocked)")) {
+      toast.info("Mock data detected. In production, this would download a real DOCX file.");
+      return;
+    }
+    
     try {
       const byteCharacters = atob(docxBytesBase64);
       const byteNumbers = new Array(byteCharacters.length);
@@ -252,7 +291,7 @@ const App: React.FC = () => {
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
       toast.success(`Download initiated: ${link.download}`);
-    } catch (e: unknown) {
+    } catch (e) { 
       console.error("Download error:", e); 
       toast.error("Failed to decode DOCX data.");
     }

@@ -15,7 +15,7 @@ const Header: React.FC = () => {
             <div className="absolute inset-0 bg-cyan-400/20 blur-md rounded-full -z-10"></div>
           </div>
           <h1 className="text-xl font-medium text-white">Joblo<span className="text-gradient font-semibold">AI</span></h1>
-          <div className="ml-3 px-2 py-0.5 rounded-full text-[10px] font-medium border border-cyan-500/20 bg-cyan-500/5 text-cyan-400">v3.7</div>
+          <div className="ml-3 px-2 py-0.5 rounded-full text-[10px] font-medium border border-cyan-500/20 bg-cyan-500/5 text-cyan-400">v1.0</div>
         </div>
         <div className="flex items-center space-x-2">
           <TooltipProvider delayDuration={100}>

@@ -52,6 +52,57 @@ const ResultsScreen: React.FC<ResultsScreenProps> = ({
   copyToClipboard,
   setAppStep
 }) => {
+  console.log('[ResultsScreen] Rendering with props:', { 
+    appStep,
+    scrapedJobData: !!scrapedJobData,
+    extractedCvText: !!extractedCvText,
+    originalAts: originalAts, // Log the actual originalAts object or null
+    improvedAts: !!improvedAts,
+    improvedResumeMarkdown: !!improvedResumeMarkdown 
+  });
+
+  // Check if the data required for the current step is available
+  const isCurrentStepDataReady = React.useMemo(() => {
+    let dataReady = false;
+    switch (appStep) {
+      case 'results_job_data':
+        dataReady = !!scrapedJobData && !!originalAts;
+        break;
+      case 'results_cv_preview':
+        dataReady = !!extractedCvText;
+        break;
+      case 'results_ats_original':
+        dataReady = !!originalAts;
+        break;
+      case 'results_resume_preview':
+        dataReady = !!improvedResumeMarkdown && !!improvedAts;
+        break;
+      default:
+        dataReady = true; 
+    }
+    console.log(`[ResultsScreen] useMemo for isCurrentStepDataReady: appStep=${appStep}, originalAts is ${originalAts ? 'truthy' : 'falsy'}, dataReady=${dataReady}`);
+    return dataReady;
+  }, [appStep, scrapedJobData, extractedCvText, originalAts, improvedResumeMarkdown, improvedAts]);
+
+  // If the data for the current step is not ready, show a message or loading state
+  if (appStep.startsWith('results') && !isCurrentStepDataReady) {
+    console.log(`[ResultsScreen] Data not ready for ${appStep}. Displaying 'Data Not Available'. originalAts value:`, originalAts);
+    return (
+      <div 
+        className="fixed inset-0 z-[90] flex flex-col items-center justify-center bg-black/90 backdrop-blur-md p-4 pt-16 pb-16 transition-opacity duration-500 ease-in-out" 
+        style={{ opacity: 1, visibility: 'visible' }}
+      >
+        <div className="text-white text-center">
+          <h3 className="text-xl font-medium mb-4">Data Not Available</h3>
+          <p className="mb-6">The required data for step '{appStep.replace("results_","")}' is not available. This might be due to an API error or incomplete processing.</p>
+          <Button onClick={() => resetApp('initial_input')}>
+            Start Over
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div 
       className="fixed inset-0 z-[90] flex flex-col items-center justify-center bg-black/90 backdrop-blur-md p-4 pt-16 pb-16 overflow-y-auto transition-opacity duration-500 ease-in-out" 
@@ -61,20 +112,22 @@ const ResultsScreen: React.FC<ResultsScreenProps> = ({
         <div className="aurora-gradient aurora-g1"></div>
         <div className="aurora-gradient aurora-g2"></div>
       </div>
+      
       <div className="w-full py-4 relative z-10">
         
-        {/* Step: Show Job Data */}
-        {appStep === 'results_job_data' && scrapedJobData && (
+        {/* Step: Show Job Data & Original ATS */}
+        {appStep === 'results_job_data' && scrapedJobData && originalAts && (
           <ResultsDisplayCard 
-            title="Job Analysis" 
+            title="Initial Analysis & Job Data" 
             icon={Briefcase} 
-            description="Key information extracted from job posting" 
+            description="Extracted job details and initial ATS score for your resume."
             nextAction={handleProceedToCvPreview} 
-            nextActionLabel="View Resume" 
+            nextActionLabel="View Extracted Resume Text" 
             prevAction={() => resetApp('optional_kb_upload')}
             prevActionLabel="Back"
           >
-            <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1.5 modern-scrollbar">
+            <div className="space-y-6 max-h-[70vh] overflow-y-auto pr-1.5 modern-scrollbar">
+              <div>
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center">
                   <div className="h-2 w-2 bg-cyan-400 rounded-full mr-2"></div>
@@ -87,14 +140,12 @@ const ResultsScreen: React.FC<ResultsScreenProps> = ({
                   onClick={() => copyToClipboard(JSON.stringify(scrapedJobData), 'Job data')}
                 >
                   <Copy className="h-3 w-3 mr-1.5" />
-                  Copy Data
+                    Copy Job Data
                 </Button>
               </div>
-              
               <div className="frost-glass rounded-xl overflow-hidden border border-white/10">
                 <JobDataDisplay data={scrapedJobData} />
               </div>
-              
               {jobUrl && jobInputUIMode === 'link' && (
                 <Button 
                   variant="link" 
@@ -107,6 +158,21 @@ const ResultsScreen: React.FC<ResultsScreenProps> = ({
                   </a>
                 </Button>
               )}
+              </div>
+              <Separator className="bg-neutral-800/60"/>
+              <div>
+                 <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center">
+                    <div className="h-2 w-2 bg-purple-400 rounded-full mr-2"></div>
+                    <h3 className="text-sm font-medium text-white/90">Initial ATS Assessment</h3>
+                  </div>
+                </div>
+                <AtsScoreResultDisplay 
+                  scoreData={originalAts} 
+                  titlePrefix="Current Resume"
+                  onCopy={copyToClipboard}
+                />
+              </div>
             </div>
           </ResultsDisplayCard>
         )}
@@ -193,7 +259,7 @@ const ResultsScreen: React.FC<ResultsScreenProps> = ({
                 <Label htmlFor="finalOutputFilename" className="text-sm text-neutral-400">Output Filename:</Label>
                 <Input 
                   id="finalOutputFilename" 
-                  value={outputFilename} 
+                  value={outputFilename || ''} 
                   onChange={(e) => setOutputFilename(e.target.value)} 
                   className="mt-1 bg-neutral-900/60 border-neutral-800 text-neutral-200 focus:border-cyan-700 focus:ring-0" 
                 />

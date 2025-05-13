@@ -13,11 +13,7 @@ import json
 import numpy as np
 import cv2
 
-# Install Playwright browsers if not already installed
-if not os.path.exists("/home/appuser/.cache/ms-playwright"):
-    os.system("playwright install")
-    
-# Load environment variables from .env file
+# Load environment variables from .env file first
 load_dotenv()
 
 # Function to capture a full-page screenshot with dynamic scrolling
@@ -303,80 +299,86 @@ def click_best_matching_button(page, target_text, threshold=0.7, timeout=10000):
     return False
 
 def main_adaptive_scraper(job_listing_url, groq_api_key):
-
-    # Uncomment these lines to use a PyVirtualDisplay:
-    display = Display(visible=1, size=(1920, 1080), backend="xvfb")
-    display.start()
-    try:
-        # Initialize your ChatGroq model INSIDE the function
-        llm = ChatGroq(api_key=groq_api_key, model="llama3-70b-8192")
-
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=False)  # Set headless=True to run in the background
-            page = browser.new_page()
-            
-            # Handle JavaScript dialogs
-            handle_dialogs(page)
-            
-            print("Opening the job listing page...")
-            try:
-                # Attempt to load the page with 'networkidle'
-                page.goto(job_listing_url, wait_until='networkidle', timeout=10000)  # 10 seconds timeout
-                print("Page loaded successfully with 'networkidle'.")
-            except TimeoutError:
-                print("Page loading timed out with 'networkidle'. Retrying with 'domcontentloaded'...")
-                try:
-                    # Retry loading the page with 'domcontentloaded' as a fallback
-                    page.goto(job_listing_url, wait_until='domcontentloaded', timeout=30000)  # 30 seconds timeout
-                    print("Page loaded successfully with 'domcontentloaded'.")
-                except TimeoutError:
-                    print("Page loading timed out with 'domcontentloaded' as well.")
-            
-            # Close any popups that might have appeared
-            close_popups(page)
-            
-            # Capture screenshot before any interaction
-            screenshot_before = 'screenshot_before_click.png'
-            capture_screenshot(page, screenshot_before)
-            
-            # Extract text from the screenshot using OCR
-            extracted_text_before = extract_text_from_image(screenshot_before)
-            
-            # Use LLM to find the first expand button label
-            first_expand_button_label = find_first_expand_button_label(extracted_text_before, Groq(api_key=groq_api_key))
-            
-            if first_expand_button_label:
-                # Use the fuzzy matching function to find and click the best matching button
-                success = click_best_matching_button(page, first_expand_button_label)
-                if not success:
-                    print(f"Failed to click a button matching '{first_expand_button_label}'")
-                    
-                # Capture screenshot after clicking the button
-                screenshot_after = 'screenshot_after_click.png'
-                page.screenshot(path=screenshot_after, full_page=True)
-                # print(f"Screenshot after clicking saved as {screenshot_after}")
-                
-                # Extract text from the new screenshot using OCR
-                extracted_text_after = extract_text_from_image(screenshot_after)
-                
-                # Combine both texts for comprehensive data
-                combined_text = f"{extracted_text_before}\n{extracted_text_after}"
-            else:
-                print("No expand button label was identified. Using initial extracted text.")
-                combined_text = extracted_text_before
-
-            # Close the browser
-            browser.close()
-            print("Browser closed.")
-
-        # Step 3: Process extracted text with LLM
-        job_data = process_text_with_llm(combined_text, llm)
-        return job_data
+    print(f"Starting adaptive scraper for URL: {job_listing_url}")
     
-    # if you uncommented above, also uncomment this:
-    finally:
-        display.stop()
-        print("PyVirtualDisplay stopped.")
+    client = Groq(api_key=groq_api_key)
+    llm = ChatGroq(api_key=groq_api_key, model="llama-3.3-70b-versatile")
+
+    with sync_playwright() as p:
+        browser = None
+        browser_types_to_try = ['webkit', 'chromium', 'firefox']
+        for browser_type in browser_types_to_try:
+            try:
+                print(f"Attempting to launch {browser_type} browser headlessly...")
+                if browser_type == 'webkit':
+                    browser = p.webkit.launch(headless=True)
+                elif browser_type == 'chromium':
+                    browser = p.chromium.launch(headless=True)
+                elif browser_type == 'firefox':
+                    browser = p.firefox.launch(headless=True)
+                print(f"Launched {browser_type} browser successfully.")
+                break # Exit loop if launch is successful
+            except Exception as e:
+                print(f"{browser_type.capitalize()} browser launch failed: {e}")
+                if browser_type == browser_types_to_try[-1]: # If this was the last attempt
+                    print("All browser launch attempts failed.")
+                    return {"error": f"Failed to launch any Playwright browser: {e}"}
+        
+        if not browser:
+            # This should ideally be caught by the loop's final error return, but as a safeguard:
+            return {"error": "Browser could not be initialized."}
+
+        page = browser.new_page()
+        handle_dialogs(page)
+        
+        print(f"Navigating to {job_listing_url}...")
+        try:
+            page.goto(job_listing_url, timeout=60000, wait_until='domcontentloaded')
+            print("Navigation successful.")
+        except TimeoutError:
+            print(f"Navigation timed out for {job_listing_url}.")
+            browser.close()
+            return {"error": "Page navigation timed out."}
+        except Exception as nav_exc:
+            print(f"Navigation error for {job_listing_url}: {nav_exc}")
+            browser.close()
+            return {"error": f"Page navigation failed: {nav_exc}"}
+        
+        print("Attempting initial popup closure...")
+        close_popups(page, max_attempts=2)
+        
+        temp_screenshot_path = "temp_screenshot.png"
+        
+        capture_screenshot(page, output_file=temp_screenshot_path)
+        initial_text = extract_text_from_image(temp_screenshot_path)
+        
+        if not initial_text.strip():
+            print(f"Error: Initial text extraction failed or produced empty text for {job_listing_url}.")
+            browser.close()
+            return {"error": "Initial text extraction failed."}
+            
+        button_text = find_first_expand_button_label(initial_text, client)
+        final_text_content = initial_text
+        if button_text:
+            simulate_button_click(page, button_text)
+            time.sleep(3) # Wait for content to load after click
+            capture_screenshot(page, output_file=temp_screenshot_path)
+            expanded_text = extract_text_from_image(temp_screenshot_path)
+            if expanded_text.strip(): # Use expanded text only if it's not empty
+                final_text_content = expanded_text
+            else:
+                print("Expanded text was empty, using initial text.")
+        
+        browser.close()
+        print("Browser closed.")
+        
+        if final_text_content.strip():
+            print("Processing final text content with LLM...")
+            job_info = process_text_with_llm(final_text_content, llm)
+            return job_info
+        else:
+            print(f"Error: Final text content is empty after processing for {job_listing_url}.")
+            return {"error": "No text content available after attempting to expand job description."}
 
 if __name__ == "__main__":
     # Local test: load from .env if you want to run standalone

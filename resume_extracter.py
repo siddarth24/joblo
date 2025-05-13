@@ -163,24 +163,29 @@ def extract_text_and_links_from_txt(txt_path):
     
 def clean_text(text):
     """
-    Cleans the extracted text by removing bullet points and other formatting artifacts.
+    Cleans the extracted text by removing bullet points and other formatting artifacts,
+    while preserving meaningful newlines.
     """
-    # Remove common bullet point characters at the start of lines
     cleaned_lines = []
     for line in text.splitlines():
         # Remove bullet points like '-', '*', '•', '▪', etc.
         cleaned_line = re.sub(r'^(\s*[-*•▪]\s+)', '', line)
         # Optionally, remove numbering (e.g., '1. ', '2) ', etc.)
         cleaned_line = re.sub(r'^(\s*\d+[\.\)]\s+)', '', cleaned_line)
+        
+        # Replace multiple spaces with a single space within the line
+        cleaned_line = re.sub(r'[ \t]+', ' ', cleaned_line)
+        
+        # Strip leading/trailing whitespace from the line itself
+        cleaned_line = cleaned_line.strip()
+        
         cleaned_lines.append(cleaned_line)
     
-    # Join the cleaned lines back into a single string
-    cleaned_text = '\n'.join(cleaned_lines)
+    # Join the cleaned lines back into a single string, preserving original newlines
+    # and filter out empty lines that might result from cleaning.
+    cleaned_text = '\n'.join(line for line in cleaned_lines if line) # Filter out empty lines
     
-    # # Optionally, further clean up whitespace
-    cleaned_text = re.sub(r'\s+', ' ', cleaned_text).strip()
-    
-    return cleaned_text
+    return cleaned_text.strip() # Final strip for the whole block
 
 def save_text_and_links_to_file(text, links, output_file_path):
     try:

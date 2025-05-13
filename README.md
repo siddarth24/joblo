@@ -1,77 +1,132 @@
-# Joblo
+# Joblo - AI Resume Generator
 
-This repository contains a job scraping tool designed to extract job information from LinkedIn and other job posting websites. The repository also includes a Streamlit app (`streamlit_app.py`) for user-friendly interaction with the tool.
+Joblo is an intelligent AI-powered resume optimization tool that helps job seekers tailor their resumes to specific job descriptions to maximize their chances of passing Applicant Tracking Systems (ATS).
 
-## Overview
+## Project Overview
 
-The tool includes the following scripts:
+Joblo consists of two main components:
+1. **Backend**: A Flask API that handles the core functionality including resume text extraction, ATS scoring, and AI-powered resume generation.
+2. **Frontend**: A Next.js web application that provides an intuitive user interface for interacting with the system.
 
-- **streamlit_app.py**: The main script for running the Streamlit app interface.
-- **Joblo.py**: A central script that adaptively selects the appropriate scraper based on the URL provided.
-- **linkedin_screenshot_scraper.py**: Specifically designed for scraping job postings from LinkedIn.
-- **adaptive_screenshot_scraper.py**: Handles job postings from other websites.
-- **resume_extracter.py**: Extracts details from resumes.
-- **job_description_extracter.py**: Processes job descriptions.
-- **Joblo_app.py**: Backend logic for managing scraping and parsing workflows.
-- **knowledge_base.py**: A script for managing and retrieving information related to the scraping process.
+## Features
 
-### Example Usage
+- **Job Data Extraction**: Extract job details from URLs or manual input
+- **Resume Analysis**: Extract and analyze resume content 
+- **ATS Scoring**: Score resumes against specific job descriptions
+- **Resume Enhancement**: Generate optimized resumes tailored to specific job postings
+- **LinkedIn Integration**: Save and manage LinkedIn session states
+- **Knowledge Base Integration**: Use additional materials to enhance resume generation
 
-To run the Streamlit app:
-1. Set up your environment (see below).
-2. Run the `streamlit_app.py` script:
-   ```bash
-   streamlit run streamlit_app.py
-   ```
-
-## Instructions to Set Up the Environment
+## Setup and Installation
 
 ### Prerequisites
 
-1. Install Python:
-   - **Mac**: Use Homebrew:
-     ```bash
-     brew install python
-     ```
-   - **Windows**: Download Python from [python.org](https://www.python.org/downloads/).
+- Python 3.8+
+- Node.js 18+
+- npm or yarn
 
-2. Install Tesseract OCR:
-   - **Mac**: Use Homebrew:
-     ```bash
-     brew install tesseract
-     ```
-   - **Windows**: Download Tesseract from [UB Mannheim's GitHub](https://github.com/UB-Mannheim/tesseract/wiki).
+### Initial Setup
 
-3. Install Node.js (required for Playwright):
-   - **Mac**: Use Homebrew:
-     ```bash
-     brew install node
-     ```
-   - **Windows**: Download from [nodejs.org](https://nodejs.org).
-
-### Installing Dependencies
-
-Install all required Python dependencies in one command:
-
-```bash
-pip install argparse ast asyncio glob json os pickle random re sys tempfile time typing uuid Pillow PyPDF2 PyQt5 cloudconvert opencv-python python-docx python-dotenv faiss-cpu groq langchain langchain_groq numpy pdfplumber plotly playwright pytesseract requests streamlit streamlit-lottie
-```
-
-After installing Playwright, run:
-
-```bash
-playwright install
-```
-
-### Running the Application
-
-Run the Streamlit app:
-   ```bash
-   streamlit run streamlit_app.py
+1. Clone the repository:
    ```
----
+   git clone https://github.com/yourusername/joblo.git
+   cd joblo
+   ```
 
-### Notes
+2. Create and configure your environment variables:
+   ```
+   ./create_env.sh
+   ```
+   This will create a `.env` file from the `.env.example` template. Edit the file to add your API keys.
 
-- The app provides a user-friendly way to scrape and manage job information adaptively for LinkedIn and other websites.
-- Ensure that your `.env` file contains all the necessary API keys for proper functioning.
+3. Run the setup script to create necessary directories:
+   ```
+   ./setup.py
+   ```
+
+### Backend Setup
+
+1. Install Python dependencies:
+   ```
+   pip install -r requirements.txt
+   ```
+
+### Frontend Setup
+
+1. Navigate to the frontend directory:
+   ```
+   cd frontend
+   ```
+
+2. Install dependencies:
+   ```
+   npm install
+   ```
+
+## Running the Application
+
+### Option 1: Using the start script (recommended)
+
+Run the provided start script which launches both the backend and frontend:
+
+```
+./start.sh
+```
+
+### Option 2: Running components separately
+
+1. Start the API server:
+   ```
+   python api_server.py
+   ```
+
+2. In a separate terminal, start the frontend:
+   ```
+   cd frontend
+   npm run dev
+   ```
+
+The application will be accessible at:
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:5500
+
+## API Endpoints
+
+### Authentication
+- `POST /authenticate`: Authenticate using a stored LinkedIn session
+
+### LinkedIn State Management
+- `POST /linkedin/state`: Store LinkedIn session state
+- `GET /linkedin/state/{unique_id}`: Retrieve stored LinkedIn session state
+- `DELETE /linkedin/state/{unique_id}`: Delete stored LinkedIn session state
+
+### Job Application Processing
+- `POST /process-job-application`: Process job application data
+- `POST /analyze-ats`: Analyze resume against job description for ATS scoring
+- `POST /generate-resume`: Generate improved resume based on job and resume data
+
+### Health Check
+- `GET /health`: Health check endpoint to verify API is running
+
+## Project Structure
+
+```
+joblo/
+├── api_server.py            # Flask API server
+├── frontend/                # Next.js frontend application
+│   ├── src/
+│   │   ├── app/             # Next.js pages and API routes
+│   │   ├── components/      # React components
+│   │   ├── services/        # API service calls
+│   │   └── types/           # TypeScript type definitions
+├── Joblo_streamlit.py       # Core AI logic for resume processing
+├── resume_extracter.py      # Resume text extraction
+├── knowledge_base.py        # Knowledge base processing
+├── setup.py                 # Script to initialize required directories
+├── create_env.sh            # Script to create .env file from template
+└── start.sh                 # Script to start both backend and frontend
+```
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.

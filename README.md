@@ -126,7 +126,3 @@ joblo/
 ├── create_env.sh            # Script to create .env file from template
 └── start.sh                 # Script to start both backend and frontend
 ```
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.

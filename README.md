@@ -2,8 +2,7 @@
 
 <img width="1150" alt="Screenshot 2025-05-16 at 3 49 51 PM" src="https://github.com/user-attachments/assets/4c0e1036-2b68-47ef-8418-87cd711f94cc" />
 
-Joblo is an intelligent AI![Uploading Screenshot 2025-05-16 at 3.49.51 PM.png…]()
--powered resume optimization tool that helps job seekers tailor their resumes to specific job descriptions to maximize their chances of passing Applicant Tracking Systems (ATS).
+Joblo is an intelligent AI-powered resume optimization tool that helps job seekers tailor their resumes to specific job descriptions to maximize their chances of passing Applicant Tracking Systems (ATS).
 
 ## Project Overview
 

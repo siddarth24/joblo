@@ -284,8 +284,8 @@ def process_job_application():
         
         from job_description_extracter import adaptive_scraper 
         from resume_extracter import extract_text_and_links_from_file 
-        from Joblo_streamlit import load_environment, create_embedded_resume, prepare_prompt
-        from Joblo_streamlit import generate_resume as gpt_generate_resume
+        from joblo_core import load_environment, create_embedded_resume, prepare_prompt
+        from joblo_core import generate_resume as gpt_generate_resume
 
         # Load GROQ_API_KEY, it's needed by adaptive_scraper
         # This assumes load_dotenv() has been called earlier or GROQ_API_KEY is in the environment
@@ -423,8 +423,8 @@ def analyze_ats():
         job_data = json.loads(request.form['jobData'])
         cv_text = request.form['cvText']
         
-        from Joblo_streamlit import create_embedded_resume, prepare_prompt, load_environment
-        from Joblo_streamlit import generate_resume as gpt_generate_resume
+        from joblo_core import create_embedded_resume, prepare_prompt, load_environment
+        from joblo_core import generate_resume as gpt_generate_resume
         
         openai_api_key, _ = load_environment()
         embedded_resume = create_embedded_resume(cv_text)
@@ -508,8 +508,8 @@ def generate_resume_endpoint():
                     logger.info(f"Knowledge base file saved: {filepath}")
         
         try:
-            from Joblo_streamlit import run_joblo, process_resume, load_environment, create_embedded_resume, prepare_prompt
-            from Joblo_streamlit import generate_resume as gpt_generate_resume # Renamed for clarity
+            from joblo_core import run_joblo, process_resume, load_environment, create_embedded_resume, prepare_prompt
+            from joblo_core import generate_resume as gpt_generate_resume # Renamed for clarity
             from knowledge_base import extract_relevant_chunks
             
             kb_data_chunks = []

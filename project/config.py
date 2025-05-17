@@ -58,6 +58,13 @@ class Config:
     LLM_MAX_TOKENS: int = int(os.environ.get('LLM_MAX_TOKENS', 3000))
     LLM_TOP_P: float = float(os.environ.get('LLM_TOP_P', 1.0))
 
+    # Cache Configuration
+    CACHE_LLM_RESPONSES: bool = os.environ.get('CACHE_LLM_RESPONSES', 'True').lower() in ('true', '1', 't')
+    LLM_CACHE_TTL_SECONDS: int = int(os.environ.get('LLM_CACHE_TTL_SECONDS', 86400)) # Default 24 hours
+
+    CACHE_SCRAPER_RESPONSES: bool = os.environ.get('CACHE_SCRAPER_RESPONSES', 'True').lower() in ('true', '1', 't')
+    SCRAPER_CACHE_TTL_SECONDS: int = int(os.environ.get('SCRAPER_CACHE_TTL_SECONDS', 3600)) # Default 1 hour
+
     # Feature Flags (example)
     ENABLE_RAG_FEATURE: bool = os.environ.get('ENABLE_RAG_FEATURE', 'True').lower() in ('true', '1', 't')
 

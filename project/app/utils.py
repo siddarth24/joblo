@@ -63,8 +63,37 @@ def ensure_directories_exist(app):
             os.makedirs(abs_directory_path)
             logger.info(f\"Created directory: {abs_directory_path}\")
 
+def generate_cache_key(prefix: str, *args, **kwargs) -> str:
+    """
+    Generates a stable cache key from a prefix, args, and kwargs.
+    Uses SHA256 hashing for potentially long string inputs to keep keys manageable.
+    Sorts kwargs to ensure consistent key for same parameters regardless of order.
+    """
+    import hashlib
+    import json
+
+    key_parts = [str(arg) for arg in args]
+    # Sort kwargs by key to ensure consistent ordering
+    sorted_kwargs = sorted(kwargs.items())
+    for k, v in sorted_kwargs:
+        key_parts.append(f"{k}:{str(v)}")
+    
+    # Create a hash of the combined parts if they are too long or for consistency
+    # For LLM prompts, the prompt text itself can be very long.
+    # Using a hash of the identifying components (prompt + parameters)
+    identifying_string = "|".join(key_parts)
+    
+    # Hash the identifying string to keep the key length manageable and consistent
+    hasher = hashlib.sha256()
+    hasher.update(identifying_string.encode('utf-8'))
+    hashed_parts = hasher.hexdigest()
+    
+    return f"{prefix}:{hashed_parts}"
+
 def load_prompt(filename: str) -> str:
-    """Load a prompt from the prompts directory."""
+    """
+    Loads a prompt from the specified file in the prompts directory.
+    """
     # Prompts are in project/app/prompts/
     # utils.py is in project/app/
     # So, relative path is prompts/filename

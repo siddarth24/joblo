@@ -2,60 +2,95 @@
 import json
 import os
 import sys
-import requests
+import requests # Retained for CloudConvertClient if it uses it directly, though prefer client to manage its own requests
 import time
+import logging
 
-# from dotenv import load_dotenv # Removed
+# Removed direct Langchain, cloudconvert, and specific scraper imports here as they are now in clients
+# from langchain.prompts import PromptTemplate
+# from langchain_community.chat_models import ChatOpenAI
+# from langchain.chains import LLMChain
+# from linkedin_scraper import scrape_linkedin_job
+# from adaptive_screenshot_scraper import main_adaptive_scraper
+# import cloudconvert
 
-from langchain.prompts import PromptTemplate
-from langchain_community.chat_models import ChatOpenAI
-from langchain.chains import LLMChain
+# Import client classes
+# Assuming they are accessible from project.app.clients based on typical Flask structure
+# This might need adjustment if joblo_core.py is truly standalone and sys.path isn't set up for 'project'
+# For now, let's assume it can find them or that sys.path will be handled by callers.
+# A more robust way for standalone joblo_core might be to pass client *factories* or allow None and lazy init.
+# However, for integration with the Flask app, passing instantiated clients is cleaner.
 
-from linkedin_scraper import scrape_linkedin_job
-from adaptive_screenshot_scraper import main_adaptive_scraper
+# To make joblo_core.py potentially runnable standalone for testing/scripting *without* the full Flask app context,
+# we might need to adjust how clients are imported or allow them to be None and handle that case.
+# For now, let's ensure the imports are correct for when used within the app structure.
+# One way to handle this is to attempt the import and allow it to fail if not in app context,
+# then functions would need to check if clients are None.
+# However, the primary refactor goal is for use within the app, so direct import is fine for now.
 
-import cloudconvert
+# --- Add project root to sys.path if not already present ---
+# This helps if joblo_core is run or imported from outside the `project` directory directly.
+# (e.g. from workspace root for scripts or tests not using pytest's path handling)
+PROJECT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), 'project'))
+if PROJECT_DIR not in sys.path:
+    sys.path.insert(0, PROJECT_DIR)
+    # print(f"JOBLO_CORE: Added {PROJECT_DIR} to sys.path for app.clients import")
 
-# This is your existing resume text extraction
+APP_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), 'project', 'app'))
+if APP_DIR not in sys.path:
+    sys.path.insert(0, APP_DIR)
+    # print(f"JOBLO_CORE: Added {APP_DIR} to sys.path for app.clients import")
+
+# Attempt to import clients for type hinting and core logic
+# These imports assume joblo_core.py is at the root of the workspace, and `project` is a subdir.
+# If joblo_core.py is moved into `project` or `project/app`, these would change.
+# Given the current structure, this should work if called from within the project structure or if paths are set.
+try:
+    from app.clients.openai_client import OpenAIClient
+    from app.clients.cloudconvert_client import CloudConvertClient
+    from app.clients.scraper_client import ScraperClient
+except ImportError:
+    # This block allows joblo_core.py to be imported even if the clients are not found
+    # (e.g. in a very minimal testing environment or if paths are not set up for app.clients).
+    # Functions below will need to handle None for client arguments if this is a desired fallback.
+    # For this refactor, we assume clients WILL be provided by the app/tasks.
+    OpenAIClient = None
+    CloudConvertClient = None
+    ScraperClient = None
+    logging.getLogger(__name__).warning(
+        "joblo_core: Could not import client classes from app.clients. "
+        "Ensure PYTHONPATH is set correctly or this module is used within the Flask app context. "
+        "Core functions will expect client instances to be passed."
+    )
+
+
 from resume_extracter import extract_text_and_links_from_file
-
-# 1) IMPORT the RAG method:
 from knowledge_base import extract_relevant_chunks
 
-os.environ["LANGCHAIN_TRACING_V2"] = "true"
-os.environ["LANGCHAIN_ENDPOINT"] = "https://api.smith.langchain.com"
-os.environ["LANGCHAIN_PROJECT"] = "Joblo"
+logger = logging.getLogger(__name__)
 
 ###############################################################################
-# Existing environment config (REMOVED)
+# Job data scraper (Refactored)
 ###############################################################################
-# def load_environment():
-#     load_dotenv() # Removed
-#     openai_api_key = os.getenv("OPENAI_API_KEY")
-#     cloudconvert_api_key = os.getenv("CLOUDCONVERT_API_KEY")
-#     if not openai_api_key:
-#         raise EnvironmentError("OPENAI_API_KEY is not set in the .env file.")
-#     if not cloudconvert_api_key:
-#         raise EnvironmentError("CLOUDCONVERT_API_KEY is not set in the .env file.")
-#     return openai_api_key, cloudconvert_api_key
+def adaptive_scraper(scraper_client: ScraperClient, url: str) -> dict:
+    """Scrapes job data using the provided ScraperClient."""
+    if not scraper_client:
+        logger.error("adaptive_scraper: ScraperClient instance not provided.")
+        raise ValueError("ScraperClient must be provided.")
+    try:
+        logger.info(f"joblo_core.adaptive_scraper calling client for URL: {url}")
+        job_data = scraper_client.scrape_job_data(url)
+        # The client itself should raise ValueError/ConnectionError on failure
+        return job_data
+    except (ValueError, ConnectionError) as e: # Catch errors from the client
+        logger.error(f"adaptive_scraper: Error from ScraperClient for URL {url}: {e}", exc_info=True)
+        raise # Re-raise the error for the caller (e.g., Celery task) to handle
+    except Exception as e_unhandled:
+        logger.error(f"adaptive_scraper: Unhandled error during scraping with client for URL {url}: {e_unhandled}", exc_info=True)
+        raise ConnectionError(f"An unexpected error occurred in adaptive_scraper via client: {e_unhandled}")
 
 ###############################################################################
-# Existing job data scraper
-###############################################################################
-def adaptive_scraper(url, groq_api_key):
-    if "linkedin.com" in url.lower():
-        print("Detected LinkedIn URL. Using LinkedIn scraper.")
-        job_data = scrape_linkedin_job(url, groq_api_key)
-    else:
-        print("Detected non-LinkedIn URL. Using alternative scraper.")
-        job_data = main_adaptive_scraper(url, groq_api_key)
-    
-    if not job_data:
-        raise ValueError("Failed to retrieve job data.")
-    return job_data
-
-###############################################################################
-# Prompt Preparation (MODIFIED to include relevant chunks)
+# Prompt Preparation (No change, utility function)
 ###############################################################################
 def prepare_prompt(job_description, embedded_resume, custom_prompt, relevant_chunks=None):
     """
@@ -64,9 +99,7 @@ def prepare_prompt(job_description, embedded_resume, custom_prompt, relevant_chu
     """
     relevant_text_block = ""
     if relevant_chunks:
-        # Join retrieved chunks
         relevant_text_block = "\n\n".join(relevant_chunks)
-
     prompt = f"""
 ### Job Description:
 {json.dumps(job_description, indent=4)}
@@ -85,103 +118,61 @@ Don't include any additional information or symbols.
     return prompt
 
 ###############################################################################
-# LLM-based resume generation
+# LLM-based resume generation (Refactored)
 ###############################################################################
-def generate_resume(openai_api_key, prompt, model="gpt-4o-mini", temperature=0.7, max_tokens=3000, top_p=1.0):
+def generate_resume(openai_client: OpenAIClient, prompt: str) -> str:
+    """Generates resume content using the provided OpenAIClient."""
+    if not openai_client:
+        logger.error("generate_resume: OpenAIClient instance not provided.")
+        raise ValueError("OpenAIClient must be provided.")
     try:
-        llm = ChatOpenAI(
-            openai_api_key=openai_api_key,
-            model=model,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            model_kwargs={"top_p": top_p}
-        )
-        
-        prompt_template = PromptTemplate(
-            input_variables=["prompt"],
-            template="{prompt}"
-        )
-        
-        chain = LLMChain(llm=llm, prompt=prompt_template)
-        generated_resume = chain.run({"prompt": prompt})
-        
-        print("Resume generation successful.")
-        return generated_resume
-    except Exception as e:
-        raise ConnectionError(f"Error communicating with OpenAI API: {e}")
+        logger.info("joblo_core.generate_resume calling client...")
+        generated_content = openai_client.generate_text(prompt)
+        # The client itself should raise ConnectionError on failure
+        logger.info("joblo_core.generate_resume: Content generated by client.")
+        return generated_content
+    except ConnectionError as e: # Catch errors from the client
+        logger.error(f"generate_resume: Error from OpenAIClient: {e}", exc_info=True)
+        raise # Re-raise for the caller
+    except Exception as e_unhandled:
+        logger.error(f"generate_resume: Unhandled error with OpenAIClient: {e_unhandled}", exc_info=True)
+        raise ConnectionError(f"An unexpected error occurred in generate_resume via client: {e_unhandled}")
 
 ###############################################################################
-# Resume output
+# Resume output (No change, utility function)
 ###############################################################################
 def save_resume(generated_resume, output_path):
     try:
         with open(output_path, 'w', encoding='utf-8') as file:
             file.write(generated_resume)
-        print(f"Generated resume saved to {output_path}.")
+        logger.info(f"Generated resume saved to {output_path}.")
     except Exception as e:
+        logger.error(f"Error saving generated resume to {output_path}: {e}", exc_info=True)
         raise IOError(f"Error saving generated resume: {e}")
 
-def convert_md_to_docx(cloudconvert_api_key, input_path, output_path):
-    # unchanged code:
+###############################################################################
+# MD to DOCX Conversion (Refactored)
+###############################################################################
+def convert_md_to_docx(cc_client: CloudConvertClient, input_path: str, output_path: str):
+    """Converts MD to DOCX using the provided CloudConvertClient."""
+    if not cc_client:
+        logger.error("convert_md_to_docx: CloudConvertClient instance not provided.")
+        raise ValueError("CloudConvertClient must be provided.")
     try:
-        cloudconvert.configure(api_key=cloudconvert_api_key, sandbox=False)
+        logger.info(f"joblo_core.convert_md_to_docx calling client for {input_path} -> {output_path}")
+        cc_client.convert_md_to_docx(input_path, output_path)
+        # The client handles FileNotFoundError for input_path, ConnectionError, RuntimeError for conversion issues.
+        logger.info(f"joblo_core.convert_md_to_docx: Conversion successful via client for {output_path}.")
+    except (FileNotFoundError, ConnectionError, RuntimeError) as e: # Catch errors from the client
+        logger.error(f"convert_md_to_docx: Error from CloudConvertClient for {input_path}: {e}", exc_info=True)
+        raise # Re-raise for the caller
+    except Exception as e_unhandled:
+        logger.error(f"convert_md_to_docx: Unhandled error with CloudConvertClient for {input_path}: {e_unhandled}", exc_info=True)
+        raise RuntimeError(f"An unexpected error occurred in convert_md_to_docx via client: {e_unhandled}")
 
-        job = cloudconvert.Job.create(payload={
-            "tasks": {
-                'import-my-file': {
-                    'operation': 'import/upload'
-                },
-                'convert-my-file': {
-                    'operation': 'convert',
-                    'input': 'import-my-file',
-                    'output_format': 'docx'
-                },
-                'export-my-file': {
-                    'operation': 'export/url',
-                    'input': 'convert-my-file'
-                }
-            }
-        })
-
-        import_task = next(task for task in job["tasks"] if task["operation"] == "import/upload")
-        if not import_task:
-            raise ValueError("Import task not found in job tasks.")
-
-        upload_url = import_task["result"]["form"]["url"]
-        upload_params = import_task["result"]["form"]["parameters"]
-
-        print("Uploading file...")
-        with open(input_path, 'rb') as file:
-            files = {'file': file}
-            response = requests.post(upload_url, data=upload_params, files=files)
-            response.raise_for_status()
-        print("File uploaded successfully.")
-
-        print("Waiting for job to complete...")
-        job = cloudconvert.Job.wait(id=job['id'])
-
-        export_task = next(
-            task for task in job["tasks"] if task["operation"] == "export/url" and task["status"] == "finished"
-        )
-        if not export_task:
-            raise ValueError("Export task not found or not finished.")
-
-        file_info = export_task["result"]["files"][0]
-        file_url = file_info["url"]
-
-        response = requests.get(file_url)
-        response.raise_for_status()
-        with open(output_path, 'wb') as out_file:
-            out_file.write(response.content)
-        print(f"File downloaded successfully as: {output_path}")
-
-    except requests.exceptions.RequestException as req_err:
-        raise ConnectionError(f"HTTP request error during CloudConvert conversion: {req_err}")
-    except Exception as e:
-        raise RuntimeError(f"Error during CloudConvert conversion: {e}")
 
 ###############################################################################
-# Resume text extraction from file
+# Resume text extraction from file (No change, utility function)
 ###############################################################################
 def extract_resume(resume_path):
     try:
@@ -202,90 +193,115 @@ def create_embedded_resume(combined_text):
     return embedded_resume
 
 ###############################################################################
-# MAIN: run_joblo (MODIFIED to integrate RAG)
+# MAIN: run_joblo (Refactored Signature - further implementation deferred)
 ###############################################################################
-def run_joblo(job_url, resume_path, openai_api_key, cloudconvert_api_key, groq_api_key, knowledge_base_files=None, top_k=5, job_data=None):
+def run_joblo(scraper_client: ScraperClient, openai_client: OpenAIClient, cc_client: CloudConvertClient, 
+              job_url: str, resume_path: str, 
+              knowledge_base_files=None, top_k=5, job_data=None, custom_prompt_text=None):
     """
-    1) Scrape job description from job_url.
-    2) Extract user resume from 'resume_path'.
-    3) Use RAG to find relevant chunks from knowledge_base_files (PDF/TXT).
-    4) Generate a tailored resume with all combined data.
+    Orchestrates the resume generation process using pre-configured clients.
+    This function is primarily for direct/synchronous execution or testing.
+    `custom_prompt_text` should be provided; fallback to file loading is for legacy/testing only.
     """
-    # openai_api_key, cloudconvert_api_key = load_environment() # Removed
-    
+    logger.info(f"run_joblo started. Job URL: {job_url}, Resume: {resume_path}")
+
+    # Ensure clients are provided
+    if not all([scraper_client, openai_client, cc_client]):
+        missing_clients = []
+        if not scraper_client: missing_clients.append("ScraperClient")
+        if not openai_client: missing_clients.append("OpenAIClient")
+        if not cc_client: missing_clients.append("CloudConvertClient")
+        err_msg = f"run_joblo requires the following client instances: {', '.join(missing_clients)}."
+        logger.error(err_msg)
+        raise ValueError(err_msg)
+
     # 1) Get job_data from the scraper or use pre-scraped data
     if not job_data:
-        # This part implies job_url is mandatory if job_data is not passed.
-        if not groq_api_key and "linkedin.com" not in job_url.lower(): # Non-linkedin requires GROQ
-             print("Warning: GROQ_API_KEY not set, adaptive_scraper for non-LinkedIn URLs might fail.")
-        # Ensure groq_api_key is used, not os.getenv()
-        job_data = adaptive_scraper(job_url, groq_api_key) 
-        print("\n===== Job Description (Scraped by run_joblo) =====")
-        print(json.dumps(job_data, indent=4))
-        print("==================================================\n")
+        if not job_url:
+            logger.error("run_joblo requires either job_data or job_url.")
+            raise ValueError("job_data or job_url must be provided to run_joblo.")
+        # Groq API key is now managed by the scraper_client instance
+        retrieved_job_data = adaptive_scraper(scraper_client, job_url) # Use the refactored function
+        logger.info(f"Job Description Scraped: \n{json.dumps(retrieved_job_data, indent=2)}")
+        current_job_data = retrieved_job_data # Use a different variable name to avoid confusion with the parameter
     else:
-        print("\n===== Pre-Scraped Job Description (via run_joblo) =====")
-        print(json.dumps(job_data, indent=4))
-        print("=====================================================\n")
+        logger.info(f"Using Pre-Scraped Job Description: \n{json.dumps(job_data, indent=2)}")
+        current_job_data = job_data
 
     # 2) Extract base resume
-    # This implies resume_path is mandatory.
+    if not resume_path:
+        logger.error("run_joblo requires resume_path.")
+        raise ValueError("resume_path must be provided to run_joblo.")
     combined_text = extract_resume(resume_path)
     embedded_resume = create_embedded_resume(combined_text)
 
     # 3) Retrieve relevant chunks from knowledge base (optional)
     relevant_chunks = []
     if knowledge_base_files:
+        logger.info(f"Extracting relevant chunks from KB files: {knowledge_base_files}")
         relevant_chunks = extract_relevant_chunks(
             file_paths=knowledge_base_files,
-            job_data=job_data,
+            job_data=current_job_data, # Use the job data we definitely have
             top_k=top_k
         )
+        logger.info(f"Found {len(relevant_chunks)} relevant chunks.")
 
     # 4) Build final prompt
-    # Load the resume generation prompt from its new file location
-    # joblo_core.py is at workspace_root. Prompt is at workspace_root/project/app/prompts/resume_generation.txt
-    prompt_file_path = os.path.join(os.path.dirname(__file__), "project", "app", "prompts", "resume_generation.txt")
-    try:
-        with open(prompt_file_path, 'r', encoding='utf-8') as f:
-            custom_prompt_for_resume_gen = f.read()
-    except FileNotFoundError:
-        print(f"CRITICAL ERROR in joblo_core.run_joblo: Prompt file not found at {prompt_file_path}")
-        # Handle error: maybe raise, or use a very basic default, or return an error indicator
-        raise # Or return None, None to indicate failure to caller
-    except Exception as e:
-        print(f"CRITICAL ERROR in joblo_core.run_joblo: Could not load prompt {prompt_file_path}: {e}")
-        raise # Or return None, None
-
-    prompt = prepare_prompt(
-        job_description=job_data,
+    actual_custom_prompt = ""
+    if custom_prompt_text:
+        actual_custom_prompt = custom_prompt_text
+        logger.info("Using custom_prompt_text provided as argument for run_joblo.")
+    else:
+        # Determine path relative to joblo_core.py itself, then up to project/app/prompts
+        # This makes the fallback more robust if joblo_core.py is moved
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        prompt_file_path = os.path.join(base_dir, "project", "app", "prompts", "resume_generation.txt")
+        logger.warning(f"custom_prompt_text NOT provided to run_joblo. Attempting to load from fallback path: {prompt_file_path}. This is discouraged for library use.")
+        try:
+            with open(prompt_file_path, 'r', encoding='utf-8') as f:
+                actual_custom_prompt = f.read()
+        except FileNotFoundError:
+            logger.error(f"CRITICAL: Prompt file not found at fallback path {prompt_file_path} for run_joblo.")
+            raise 
+        except Exception as e:
+            logger.error(f"CRITICAL: Could not load prompt from {prompt_file_path} for run_joblo: {e}", exc_info=True)
+            raise
+    
+    final_llm_prompt = prepare_prompt(
+        job_description=current_job_data, # Use the job data we definitely have
         embedded_resume=embedded_resume,
-        custom_prompt=custom_prompt_for_resume_gen,
+        custom_prompt=actual_custom_prompt,
         relevant_chunks=relevant_chunks
     )
 
     # 5) Generate resume
-    generated_resume = generate_resume(openai_api_key, prompt)
+    logger.info("Generating resume with LLM client...")
+    # LLM parameters (model, temp, etc.) are now part of the openai_client instance
+    generated_resume_md = generate_resume(openai_client, final_llm_prompt) # Use refactored generate_resume
 
-    # 5) Process resume (save MD, convert to DOCX)
-    # The output path for DOCX needs to be defined or passed.
-    # For now, let's assume it's derived from resume_path or a default.
-    base_output_path = os.path.splitext(resume_path)[0]
-    generated_md_path = f"{base_output_path}_joblo_generated.md"
-    generated_docx_path = f"{base_output_path}_joblo_generated.docx"
+    # 6) Save MD and convert to DOCX
+    base_output_filename = os.path.splitext(os.path.basename(resume_path))[0]
+    
+    # Define output directory relative to where joblo_core.py is located if used standalone
+    # For app usage, paths should be handled by services/config.
+    # This local output_dir is more for standalone/testing run_joblo.
+    output_dir_name = "joblo_outputs_core"
+    core_module_dir = os.path.dirname(os.path.abspath(__file__))
+    output_dir_path = os.path.join(core_module_dir, output_dir_name)
+    
+    if not os.path.exists(output_dir_path):
+        os.makedirs(output_dir_path, exist_ok=True)
+        logger.info(f"Created output directory for run_joblo: {output_dir_path}")
 
-    process_resume(generated_resume, cloudconvert_api_key, generated_md_path, generated_docx_path)
+    generated_md_path = os.path.join(output_dir_path, f"{base_output_filename}_joblo_generated.md")
+    generated_docx_path = os.path.join(output_dir_path, f"{base_output_filename}_joblo_generated.docx")
 
-    return generated_md_path, generated_docx_path # Return paths to generated files
+    logger.info(f"Saving generated Markdown to: {generated_md_path}")
+    save_resume(generated_resume_md, generated_md_path)
+    
+    logger.info(f"Converting Markdown to DOCX: {generated_md_path} -> {generated_docx_path}")
+    convert_md_to_docx(cc_client, generated_md_path, generated_docx_path) # Use refactored convert_md_to_docx
 
-###############################################################################
-# Resume processing: save markdown and convert to DOCX
-###############################################################################
-def process_resume(generated_resume, cloudconvert_api_key, output_md_path, output_docx_path):
-    """Saves the generated resume as Markdown and then converts it to DOCX."""
-    save_resume(generated_resume, output_md_path)
-    convert_md_to_docx(cloudconvert_api_key, output_md_path, output_docx_path)
-    print(f"Resume processed and saved as {output_md_path} and {output_docx_path}")
+    logger.info(f"run_joblo completed. MD: {generated_md_path}, DOCX: {generated_docx_path}")
+    return generated_md_path, generated_docx_path
 
-# Make sure to remove any standalone load_dotenv() calls if present at the top of the file.
-# Typically, it's called once. The one at line 7 was the main one.

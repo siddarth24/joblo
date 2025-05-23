@@ -1,6 +1,6 @@
-# Joblo - AI Resume Generator
+# Joblo
 
-<img width="1150" alt="Screenshot 2025-05-16 at 3 49 51 PM" src="https://github.com/user-attachments/assets/4c0e1036-2b68-47ef-8418-87cd711f94cc" />
+<img width="1155" alt="Screenshot 2025-05-23 at 2 54 03 PM" src="https://github.com/user-attachments/assets/23075804-7f43-4fa7-908c-3a4285455050" />
 
 Joblo is an intelligent AI-powered resume optimization tool that helps job seekers tailor their resumes to specific job descriptions to maximize their chances of passing Applicant Tracking Systems (ATS).
 

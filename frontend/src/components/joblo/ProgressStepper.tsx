@@ -18,13 +18,12 @@ const steps: { key: AppStep; label: string }[] = [
 ];
 
 const ProgressStepper: React.FC<ProgressStepperProps> = ({ currentStep, className }) => {
-  // Get the numeric index of the current step
   const currentIndex = steps.findIndex(step => {
     if (currentStep === 'loading') {
-      return false; // Special handling for loading state
+      return false;
     }
     if (currentStep === 'error') {
-      return false; // Special handling for error state
+      return false;
     }
     return step.key === currentStep;
   });
@@ -32,10 +31,8 @@ const ProgressStepper: React.FC<ProgressStepperProps> = ({ currentStep, classNam
   return (
     <div className={cn("w-full py-3 px-4 flex items-center justify-center", className)}>
       <div className="flex items-center justify-between max-w-2xl w-full relative">
-        {/* Progress line */}
         <div className="absolute left-0 right-0 top-1/2 h-0.5 bg-white/10 -translate-y-1/2 z-0"></div>
         
-        {/* Active progress line */}
         <div 
           className="absolute left-0 top-1/2 h-0.5 bg-gradient-to-r from-cyan-500 to-blue-500 -translate-y-1/2 z-0 transition-all duration-500"
           style={{ 
@@ -43,7 +40,6 @@ const ProgressStepper: React.FC<ProgressStepperProps> = ({ currentStep, classNam
           }}
         ></div>
         
-        {/* Steps */}
         {steps.map((step, index) => {
           const isCompleted = currentIndex > index;
           const isCurrent = currentIndex === index;

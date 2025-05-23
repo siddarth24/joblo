@@ -10,7 +10,6 @@ const JobDataDisplay: React.FC<JobDataDisplayProps> = ({ data }) => {
   return renderJobData(data);
 };
 
-// Function to recursively render job data nicely with keyword placeholders
 const renderJobData = (data: any, path: string = ''): React.ReactNode => {
   const isPotentiallyKeywordRich = (key: string): boolean => {
     const lowerKey = key.toLowerCase();

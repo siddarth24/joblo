@@ -1,6 +1,8 @@
 import React from 'react';
-import { AlertTriangle, ArrowLeft } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { AlertCircle, RefreshCw } from 'lucide-react';
+import { Button, MotionButton } from '@/components/ui/button';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import { motion } from 'framer-motion';
 
 interface ErrorScreenProps {
   isError: boolean;
@@ -10,24 +12,49 @@ interface ErrorScreenProps {
 const ErrorScreen: React.FC<ErrorScreenProps> = ({ isError, resetApp }) => {
   return (
     <div 
-      className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black/90 backdrop-blur-md p-4 transition-opacity duration-500 ease-in-out" 
+      className="fixed inset-0 z-[100] flex flex-col items-center justify-center p-6 transition-opacity duration-500 ease-in-out" 
       style={{ opacity: isError ? 1 : 0, visibility: isError ? 'visible' : 'hidden' }}
     >
-      <div className="aurora-bg opacity-30">
-        <div className="aurora-gradient aurora-g1"></div>
-        <div className="aurora-gradient aurora-g2"></div>
+      <div className="absolute inset-0 overflow-hidden">
+        <div className="absolute -top-[40%] -left-[20%] w-[80%] h-[70%] rounded-full bg-destructive/5 blur-3xl"></div>
+        <div className="absolute -bottom-[40%] -right-[20%] w-[80%] h-[70%] rounded-full bg-primary/5 blur-3xl"></div>
       </div>
-      <div className="bg-neutral-950/80 p-8 rounded-xl border border-red-900/30 shadow-xl relative z-10 w-full max-w-sm text-center">
-        <AlertTriangle className="w-12 h-12 text-red-500/90 mx-auto" />
-        <h2 className="mt-5 text-lg font-medium text-white">Error</h2>
-        <p className="mt-2 text-sm text-neutral-400 mb-6">An unexpected error occurred while processing your request.</p>
-        <Button 
-          onClick={resetApp} 
-          className="bg-neutral-800 hover:bg-neutral-700 text-white transition-colors"
-        >
-          <ArrowLeft className="mr-2 h-4 w-4" /> Return to Start
-        </Button>
-      </div>
+      
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.5 }}
+        className="w-full max-w-md relative z-10"
+      >
+        <Card variant="glass" className="backdrop-blur-xl border-destructive/20">
+          <CardHeader className="pb-4">
+            <div className="mx-auto w-12 h-12 rounded-full bg-destructive/10 flex items-center justify-center mb-4">
+              <AlertCircle className="h-6 w-6 text-destructive" />
+            </div>
+            <CardTitle className="text-center">Something went wrong</CardTitle>
+            <CardDescription className="text-center">
+              We encountered an error while processing your request. This might be due to server issues or data validation problems.
+            </CardDescription>
+          </CardHeader>
+          
+          <CardContent>
+            <p className="text-sm text-center text-muted-foreground">
+              You can try refreshing the page or starting a new session.
+            </p>
+          </CardContent>
+          
+          <CardFooter className="flex justify-center pb-6">
+            <MotionButton 
+              variant="default" 
+              onClick={resetApp}
+              className="px-6"
+            >
+              <RefreshCw className="mr-2 h-4 w-4" /> 
+              Try Again
+            </MotionButton>
+          </CardFooter>
+        </Card>
+      </motion.div>
     </div>
   );
 };

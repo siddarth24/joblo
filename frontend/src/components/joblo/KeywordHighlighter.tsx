@@ -12,14 +12,8 @@ const KeywordHighlighter: React.FC<KeywordHighlighterProps> = ({ text, keywords,
     if (!keywords || keywords.length === 0 || !text) {
       return text;
     }
-    
-    // Sort keywords by length (longest first) to prevent nested replacements
     const sortedKeywords = [...keywords].sort((a, b) => b.length - a.length);
-    
-    // Create a map to track where highlights should go
     let highlightMap = new Map<number, { isStart: boolean; keyword: string }>();
-    
-    // For each keyword, find all occurrences and mark their positions
     sortedKeywords.forEach(keyword => {
       if (!keyword.trim()) return;
 
@@ -30,7 +24,6 @@ const KeywordHighlighter: React.FC<KeywordHighlighterProps> = ({ text, keywords,
         const start = match.index;
         const end = start + match[0].length;
         
-        // Check if this would overlap with existing highlights
         let overlaps = false;
         highlightMap.forEach((value, position) => {
           if ((position >= start && position < end) || 
@@ -46,15 +39,12 @@ const KeywordHighlighter: React.FC<KeywordHighlighterProps> = ({ text, keywords,
       }
     });
 
-    // If no matches found, return the original text
     if (highlightMap.size === 0) {
       return text;
     }
     
-    // Create an array of positions for sorting
     const positions = Array.from(highlightMap.keys()).sort((a, b) => a - b);
     
-    // Build the highlighted HTML
     let result = [];
     let lastPos = 0;
     let openTags = 0;
@@ -77,12 +67,10 @@ const KeywordHighlighter: React.FC<KeywordHighlighterProps> = ({ text, keywords,
       lastPos = pos;
     });
     
-    // Add remaining text
     if (lastPos < text.length) {
       result.push(text.substring(lastPos));
     }
     
-    // Close any open tags (shouldn't happen with proper matching, but just in case)
     while (openTags > 0) {
       result.push('</span>');
       openTags--;

@@ -15,15 +15,13 @@ const SleekCircularGauge: React.FC<SleekCircularGaugeProps> = ({
   const circumference = 2 * Math.PI * radius;
   const offset = circumference - (score / 100) * circumference;
   
-  // Dynamic color based on score
   const getScoreColor = () => {
-    if (score >= 85) return 'rgb(16, 185, 129)'; // Green
-    if (score >= 70) return 'rgb(14, 165, 233)'; // Blue
-    if (score >= 50) return 'rgb(250, 204, 21)'; // Yellow
-    return 'rgb(239, 68, 68)'; // Red
+    if (score >= 85) return 'rgb(16, 185, 129)';
+    if (score >= 70) return 'rgb(14, 165, 233)';
+    if (score >= 50) return 'rgb(250, 204, 21)';
+    return 'rgb(239, 68, 68)';
   };
   
-  // Dynamic background glow based on score
   const getGlowColor = () => {
     if (score >= 85) return 'rgba(16, 185, 129, 0.2)';
     if (score >= 70) return 'rgba(14, 165, 233, 0.2)';
@@ -33,7 +31,6 @@ const SleekCircularGauge: React.FC<SleekCircularGaugeProps> = ({
 
   return (
     <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
-      {/* Background glow */}
       <div 
         className="absolute rounded-full animate-pulse" 
         style={{ 
@@ -45,7 +42,6 @@ const SleekCircularGauge: React.FC<SleekCircularGaugeProps> = ({
       ></div>
       
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
-        {/* Background circle */}
         <circle 
           className="text-white/5" 
           strokeWidth={strokeWidth} 
@@ -56,7 +52,6 @@ const SleekCircularGauge: React.FC<SleekCircularGaugeProps> = ({
           cy={size / 2} 
         />
         
-        {/* Progress circle with gradient */}
         <circle 
           className="transition-all duration-1000 ease-out" 
           strokeWidth={strokeWidth} 
@@ -71,7 +66,6 @@ const SleekCircularGauge: React.FC<SleekCircularGaugeProps> = ({
         />
       </svg>
       
-      {/* Score text */}
       <div className="absolute flex flex-col items-center justify-center text-center">
         <span className="text-xl font-medium text-white">{score}</span>
         <span className="text-[9px] text-white/50 uppercase tracking-wider mt-[-4px]">pts</span>

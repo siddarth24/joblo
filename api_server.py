@@ -5,6 +5,7 @@ import os
 import json
 import logging
 import time
+import base64
 from logging.handlers import RotatingFileHandler
 from functools import wraps
 import traceback
@@ -442,9 +443,9 @@ def process_job_application():
             elif (
                 job_url
             ):  # If only URL was provided and scraping failed to get description
-                job_data["Description"] = (
-                    f"Job details from {job_url} (Description not extracted)."
-                )
+                job_data[
+                    "Description"
+                ] = f"Job details from {job_url} (Description not extracted)."
             else:
                 job_data["Description"] = "No job description available."
 
@@ -710,9 +711,22 @@ def generate_resume_endpoint():
 
         import tempfile
         import os
-        import base64
+        # import base64 # For later use, ensure it is imported
 
-        temp_dir = tempfile.mkdtemp()
+        # Ensure joblo_core and knowledge_base functions are imported
+        from joblo_core import (
+            run_joblo,
+            process_resume, # Needed later
+            load_environment, # Needed later for improved ATS
+            create_embedded_resume, # Needed later for improved ATS
+            prepare_prompt # Needed later for improved ATS
+        )
+        from joblo_core import (
+            generate_resume as gpt_generate_resume, # Needed later for improved ATS
+        ) 
+        from knowledge_base import extract_relevant_chunks
+
+        temp_dir = tempfile.mkdtemp() # This was outside the try block before, ensure it's handled
         output_md_path = os.path.join(temp_dir, "improved_resume.md")
         output_docx_path = os.path.join(temp_dir, "improved_resume.docx")
 
@@ -729,159 +743,151 @@ def generate_resume_endpoint():
                     kb_file_paths.append(filepath)
                     logger.info(f"Knowledge base file saved: {filepath}")
 
-        try:
-            from joblo_core import (
-                run_joblo,
-                process_resume,
-                load_environment,
-                create_embedded_resume,
-                prepare_prompt,
+        kb_data_chunks = [] 
+        if kb_file_paths:
+            kb_data_chunks = extract_relevant_chunks(
+                file_paths=kb_file_paths,
+                job_data=job_data, 
+                top_k=5, 
             )
-            from joblo_core import (
-                generate_resume as gpt_generate_resume,
-            )  # Renamed for clarity
-            from knowledge_base import extract_relevant_chunks
+            logger.info(f"Processed {len(kb_data_chunks)} knowledge base chunks")
 
-            kb_data_chunks = []
-            if kb_file_paths:
-                kb_data_chunks = extract_relevant_chunks(
-                    file_paths=kb_file_paths,
-                    job_data=job_data,
-                    top_k=5,  # Or some other configurable value
-                )
-                logger.info(f"Processed {len(kb_data_chunks)} knowledge base chunks")
+        temp_resume_path = None
+        if cv_text:
+            with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".txt", encoding='utf-8') as tmp_file:
+                tmp_file.write(cv_text)
+                temp_resume_path = tmp_file.name
+            logger.info(f"Saved cv_text to temporary file: {temp_resume_path} for run_joblo")
 
-            generated_markdown_resume, cloudconvert_api_key = run_joblo(
-                cv_text, job_data, kb_data_chunks
+        if not temp_resume_path:
+            logger.error("cv_text was empty, cannot create a temporary resume file for run_joblo.")
+            if os.path.exists(temp_dir): shutil.rmtree(temp_dir, ignore_errors=True) # Cleanup temp_dir
+            return jsonify({"success": False, "error": "CV text is empty, cannot process."}), 500
+
+        source_url_from_job_data = job_data.get("SourceURL")
+
+        # Corrected single call to run_joblo
+        generated_markdown_resume, cloudconvert_api_key = run_joblo(
+            job_url=source_url_from_job_data,    # First positional argument for run_joblo
+            resume_path=temp_resume_path,        # Second positional argument for run_joblo
+            knowledge_base_files=kb_file_paths,  # Parameter for knowledge files
+            job_data=job_data                    # Keyword argument to ensure it's populated
+        )
+
+        if temp_resume_path and os.path.exists(temp_resume_path):
+             os.remove(temp_resume_path)
+             logger.info(f"Removed temporary resume file: {temp_resume_path}")
+
+        company_name = job_data.get("Company", "Company")
+        job_title = job_data.get("Job Title", "Position")
+        output_filename_base = f"{company_name.replace(' ', '_')}_{job_title.replace(' ', '_')}_Resume_{int(time.time())}"
+
+        with open(output_md_path, "w", encoding="utf-8") as f:
+            f.write(generated_markdown_resume)
+
+        process_resume(
+            generated_markdown_resume, cloudconvert_api_key, output_docx_path
+        )  # Saves as output_docx_path
+
+        with open(output_docx_path, "rb") as f:
+            docx_bytes = f.read()
+            docx_base64_encoded = base64.b64encode(docx_bytes).decode("utf-8")
+
+        # Generate ATS score for the *improved* resume
+        openai_api_key, _ = load_environment()
+        embedded_improved_resume = create_embedded_resume(generated_markdown_resume)
+
+        # Refined prompt for improved ATS analysis
+        custom_prompt_improved_ats = (
+            "You are an advanced AI specializing in ATS (Applicant Tracking System) analysis.\\n"
+            "Your task is to analyze this IMPROVED resume against the original job description.\\n"
+            "Based on this analysis, you MUST return ONLY a single, valid JSON object and NOTHING ELSE. Do not include any explanatory text before or after the JSON object.\\n"
+            "The JSON object must conform to the following structure:\\n"
+            "{\\n"
+            '  "score": integer (0-100 representing ATS compatibility, aim for a score reflecting improvement over any previous analysis if applicable),\\n'
+            '  "summary": string (a concise summary of how the IMPROVED resume aligns with the job description, focusing on key ATS factors like experience, skills, and qualifications.),\\n'
+            '  "recommendations": array of strings (actionable advice, max 2 items, for any final minor tweaks or considerations, e.g., "Consider tailoring the summary statement slightly for other similar roles.")\\n'
+            "}\\n"
+            "Focus your analysis on these factors for the score and summary:\\n"
+            "1. Alignment of candidate's years of experience with job requirements.\\n"
+            "2. Match between candidate's roles/responsibilities and those in the job description.\\n"
+            "3. Correspondence of candidate's qualifications (degrees, certifications, skills) with job description specifics.\\n"
+            "Again, ensure your entire response is ONLY the JSON object specified."
+        )
+
+        prompt_improved_ats = prepare_prompt(
+            job_data, embedded_improved_resume, custom_prompt_improved_ats
+        )
+        improved_ats_output_str = gpt_generate_resume(
+            openai_api_key,
+            prompt_improved_ats,
+            model="gpt-4o-mini",
+            temperature=0.1,
+        )  # Lowered temperature
+
+        import re
+
+        json_match_improved_ats = re.search(
+            r"```json\\s*(.*?)\\s*```|{.*}", improved_ats_output_str, re.DOTALL
+        )
+        improved_ats_score_data = {}
+
+        if json_match_improved_ats:
+            json_str_improved_ats = json_match_improved_ats.group(
+                1
+            ) or json_match_improved_ats.group(0)
+            json_str_improved_ats = (
+                json_str_improved_ats.replace("```json", "")
+                .replace("```", "")
+                .strip()
             )
-
-            company_name = job_data.get("Company", "Company")
-            job_title = job_data.get("Job Title", "Position")
-            output_filename_base = f"{company_name.replace(' ', '_')}_{job_title.replace(' ', '_')}_Resume_{int(time())}"
-
-            with open(output_md_path, "w", encoding="utf-8") as f:
-                f.write(generated_markdown_resume)
-
-            process_resume(
-                generated_markdown_resume, cloudconvert_api_key, output_docx_path
-            )  # Saves as output_docx_path
-
-            with open(output_docx_path, "rb") as f:
-                docx_bytes = f.read()
-                docx_base64_encoded = base64.b64encode(docx_bytes).decode("utf-8")
-
-            # Generate ATS score for the *improved* resume
-            openai_api_key, _ = load_environment()
-            embedded_improved_resume = create_embedded_resume(generated_markdown_resume)
-
-            # Refined prompt for improved ATS analysis
-            custom_prompt_improved_ats = (
-                "You are an advanced AI specializing in ATS (Applicant Tracking System) analysis.\\n"
-                "Your task is to analyze this IMPROVED resume against the original job description.\\n"
-                "Based on this analysis, you MUST return ONLY a single, valid JSON object and NOTHING ELSE. Do not include any explanatory text before or after the JSON object.\\n"
-                "The JSON object must conform to the following structure:\\n"
-                "{\\n"
-                '  "score": integer (0-100 representing ATS compatibility, aim for a score reflecting improvement over any previous analysis if applicable),\\n'
-                '  "summary": string (a concise summary of how the IMPROVED resume aligns with the job description, focusing on key ATS factors like experience, skills, and qualifications.),\\n'
-                '  "recommendations": array of strings (actionable advice, max 2 items, for any final minor tweaks or considerations, e.g., "Consider tailoring the summary statement slightly for other similar roles.")\\n'
-                "}\\n"
-                "Focus your analysis on these factors for the score and summary:\\n"
-                "1. Alignment of candidate's years of experience with job requirements.\\n"
-                "2. Match between candidate's roles/responsibilities and those in the job description.\\n"
-                "3. Correspondence of candidate's qualifications (degrees, certifications, skills) with job description specifics.\\n"
-                "Again, ensure your entire response is ONLY the JSON object specified."
-            )
-
-            prompt_improved_ats = prepare_prompt(
-                job_data, embedded_improved_resume, custom_prompt_improved_ats
-            )
-            improved_ats_output_str = gpt_generate_resume(
-                openai_api_key,
-                prompt_improved_ats,
-                model="gpt-4o-mini",
-                temperature=0.1,
-            )  # Lowered temperature
-
-            import re
-
-            json_match_improved_ats = re.search(
-                r"```json\\s*(.*?)\\s*```|{.*}", improved_ats_output_str, re.DOTALL
-            )
-            improved_ats_score_data = {}
-
-            if json_match_improved_ats:
-                json_str_improved_ats = json_match_improved_ats.group(
-                    1
-                ) or json_match_improved_ats.group(0)
-                json_str_improved_ats = (
-                    json_str_improved_ats.replace("```json", "")
-                    .replace("```", "")
-                    .strip()
-                )
-                try:
-                    improved_ats_score_data = json.loads(json_str_improved_ats)
-                except json.JSONDecodeError as e:
-                    logger.error(
-                        f"Failed to parse improved ATS JSON from LLM output: {json_str_improved_ats}. Error: {e}"
-                    )
-                    return (
-                        jsonify(
-                            {
-                                "success": False,
-                                "error": "Failed to parse improved ATS score JSON. Invalid format from AI.",
-                            }
-                        ),
-                        500,
-                    )
-            else:
+            try:
+                improved_ats_score_data = json.loads(json_str_improved_ats)
+            except json.JSONDecodeError as e:
                 logger.error(
-                    f"Failed to find improved ATS JSON in LLM output: {improved_ats_output_str}"
+                    f"Failed to parse improved ATS JSON from LLM output: {json_str_improved_ats}. Error: {e}"
                 )
                 return (
                     jsonify(
                         {
                             "success": False,
-                            "error": "Failed to find improved ATS score JSON in AI response.",
+                            "error": "Failed to parse improved ATS score JSON. Invalid format from AI.",
                         }
                     ),
                     500,
                 )
-
-            import shutil
-
-            shutil.rmtree(temp_dir, ignore_errors=True)
-
-            logger.info(
-                "Resume generation and improved ATS analysis completed successfully"
+        else:
+            logger.error(
+                f"Failed to find improved ATS JSON in LLM output: {improved_ats_output_str}"
             )
-            return jsonify(
-                {
-                    "success": True,
-                    "data": {
-                        "improvedResumeMarkdown": generated_markdown_resume,
-                        "improvedAts": improved_ats_score_data,
-                        "docxBytesBase64": docx_base64_encoded,
-                        "outputFilename": f"{output_filename_base}.docx",
-                    },
-                }
-            )
-        except Exception as e_inner:
-            import shutil
-
-            shutil.rmtree(temp_dir, ignore_errors=True)  # Ensure cleanup on inner error
-            logger.error(f"Error during resume generation/processing: {str(e_inner)}")
-            logger.error(traceback.format_exc())
-            # Raise to be caught by outer try-except, or return specific error
             return (
                 jsonify(
                     {
                         "success": False,
-                        "error": f"Error during resume core processing: {str(e_inner)}",
+                        "error": "Failed to find improved ATS score JSON in AI response.",
                     }
                 ),
                 500,
             )
 
+        import shutil
+
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+        logger.info(
+            "Resume generation and improved ATS analysis completed successfully"
+        )
+        return jsonify(
+            {
+                "success": True,
+                "data": {
+                    "improvedResumeMarkdown": generated_markdown_resume,
+                    "improvedAts": improved_ats_score_data,
+                    "docxBytesBase64": docx_base64_encoded,
+                    "outputFilename": f"{output_filename_base}.docx",
+                },
+            }
+        )
     except Exception as e_outer:
         logger.error(f"Error in /generate-resume endpoint: {str(e_outer)}")
         logger.error(traceback.format_exc())
@@ -928,3 +934,4 @@ if __name__ == "__main__":
         f"Starting Joblo API server on {Config.HOST}:{Config.PORT} (Debug: {Config.DEBUG})"
     )
     app.run(host=Config.HOST, port=Config.PORT, debug=Config.DEBUG)
+

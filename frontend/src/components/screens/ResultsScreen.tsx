@@ -1,15 +1,16 @@
 import React from 'react';
-import { Briefcase, Copy, Download, ExternalLink, Eye, LinkIcon, Send, FileText } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Briefcase, Copy, Download, ExternalLink, Eye, FileText, ArrowLeft, ArrowRight } from 'lucide-react';
+import { Button, MotionButton } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@radix-ui/react-label';
 import { Separator } from '@/components/ui/separator';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { AppStep, AtsScore, JobData } from '@/types';
-import ResultsDisplayCard from '../joblo/ResultsDisplayCard';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter, AnimateIn } from '@/components/ui/card';
 import AtsScoreResultDisplay from '../joblo/AtsScoreResultDisplay';
 import JobDataDisplay from '../joblo/JobDataDisplay';
+import { motion } from 'framer-motion';
 
 interface ResultsScreenProps {
   appStep: AppStep;
@@ -31,6 +32,76 @@ interface ResultsScreenProps {
   copyToClipboard: (text: string | undefined | null, type: string) => void;
   setAppStep: (step: AppStep) => void;
 }
+
+const ResultsDisplayCard: React.FC<{
+  title: string;
+  icon: React.ElementType;
+  description: string;
+  children: React.ReactNode;
+  nextAction?: () => void;
+  nextActionLabel?: string;
+  prevAction?: () => void;
+  prevActionLabel?: string;
+}> = ({ 
+  title, 
+  icon: Icon, 
+  description, 
+  children, 
+  nextAction, 
+  nextActionLabel = "Next", 
+  prevAction, 
+  prevActionLabel = "Back" 
+}) => (
+  <motion.div
+    initial={{ opacity: 0, y: 20 }}
+    animate={{ opacity: 1, y: 0 }}
+    exit={{ opacity: 0, y: -20 }}
+    transition={{ duration: 0.4 }}
+    className="w-full max-w-3xl mx-auto"
+  >
+    <Card variant="glass" className="backdrop-blur-xl border-white/10">
+      <CardHeader className="relative pb-2">
+        <div className="absolute -top-12 -left-12 w-24 h-24 bg-primary/5 rounded-full blur-2xl"></div>
+        <div className="absolute -bottom-12 -right-12 w-24 h-24 bg-secondary/5 rounded-full blur-2xl"></div>
+        <div className="flex items-center mb-1">
+          <div className="mr-3 p-2 rounded-lg bg-primary/10 text-primary">
+            <Icon className="h-5 w-5" />
+          </div>
+          <CardTitle>{title}</CardTitle>
+        </div>
+        <CardDescription>{description}</CardDescription>
+      </CardHeader>
+      
+      <CardContent className="pt-3">
+        {children}
+      </CardContent>
+      
+      <CardFooter className="flex justify-between pt-4 border-t border-white/10">
+        {prevAction && (
+          <MotionButton 
+            variant="outline" 
+            size="sm" 
+            onClick={prevAction}
+          >
+            <ArrowLeft className="mr-1 h-4 w-4" />
+            {prevActionLabel}
+          </MotionButton>
+        )}
+        <div className="flex-1"></div>
+        {nextAction && (
+          <MotionButton 
+            variant="default" 
+            size="sm" 
+            onClick={nextAction}
+          >
+            {nextActionLabel}
+            <ArrowRight className="ml-1 h-4 w-4" />
+          </MotionButton>
+        )}
+      </CardFooter>
+    </Card>
+  </motion.div>
+);
 
 const ResultsScreen: React.FC<ResultsScreenProps> = ({
   appStep,
@@ -56,12 +127,11 @@ const ResultsScreen: React.FC<ResultsScreenProps> = ({
     appStep,
     scrapedJobData: !!scrapedJobData,
     extractedCvText: !!extractedCvText,
-    originalAts: originalAts, // Log the actual originalAts object or null
+    originalAts: originalAts,
     improvedAts: !!improvedAts,
     improvedResumeMarkdown: !!improvedResumeMarkdown 
   });
 
-  // Check if the data required for the current step is available
   const isCurrentStepDataReady = React.useMemo(() => {
     let dataReady = false;
     switch (appStep) {
@@ -84,203 +154,234 @@ const ResultsScreen: React.FC<ResultsScreenProps> = ({
     return dataReady;
   }, [appStep, scrapedJobData, extractedCvText, originalAts, improvedResumeMarkdown, improvedAts]);
 
-  // If the data for the current step is not ready, show a message or loading state
   if (appStep.startsWith('results') && !isCurrentStepDataReady) {
     console.log(`[ResultsScreen] Data not ready for ${appStep}. Displaying 'Data Not Available'. originalAts value:`, originalAts);
     return (
       <div 
-        className="fixed inset-0 z-[90] flex flex-col items-center justify-center bg-black/90 backdrop-blur-md p-4 pt-16 pb-16 transition-opacity duration-500 ease-in-out" 
+        className="fixed inset-0 z-[90] flex flex-col items-center justify-center p-6" 
         style={{ opacity: 1, visibility: 'visible' }}
       >
-        <div className="text-white text-center">
-          <h3 className="text-xl font-medium mb-4">Data Not Available</h3>
-          <p className="mb-6">The required data for step '{appStep.replace("results_","")}' is not available. This might be due to an API error or incomplete processing.</p>
-          <Button onClick={() => resetApp('initial_input')}>
-            Start Over
-          </Button>
-        </div>
+        <Card variant="glass" className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle className="text-center">Data Not Available</CardTitle>
+            <CardDescription className="text-center">
+              The required data for this step is not available. This might be due to an error or incomplete processing.
+            </CardDescription>
+          </CardHeader>
+          <CardFooter className="flex justify-center pt-4 pb-2">
+            <MotionButton 
+              variant="default" 
+              onClick={() => resetApp('initial_input')}
+            >
+              Start Over
+            </MotionButton>
+          </CardFooter>
+        </Card>
       </div>
     );
   }
 
   return (
     <div 
-      className="fixed inset-0 z-[90] flex flex-col items-center justify-center bg-black/90 backdrop-blur-md p-4 pt-16 pb-16 overflow-y-auto transition-opacity duration-500 ease-in-out" 
+      className="fixed inset-0 z-[90] flex flex-col items-center justify-center p-6 overflow-y-auto" 
       style={{ opacity: appStep.startsWith('results') ? 1 : 0, visibility: appStep.startsWith('results') ? 'visible' : 'hidden' }}
     >
-      <div className="aurora-bg opacity-30">
-        <div className="aurora-gradient aurora-g1"></div>
-        <div className="aurora-gradient aurora-g2"></div>
-      </div>
-      
       <div className="w-full py-4 relative z-10">
         
-        {/* Step: Show Job Data & Original ATS */}
         {appStep === 'results_job_data' && scrapedJobData && originalAts && (
           <ResultsDisplayCard 
-            title="Initial Analysis & Job Data" 
+            title="Job Analysis" 
             icon={Briefcase} 
-            description="Extracted job details and initial ATS score for your resume."
+            description="We've analyzed the job posting and prepared a summary of the key details."
             nextAction={handleProceedToCvPreview} 
-            nextActionLabel="View Extracted Resume Text" 
+            nextActionLabel="View Resume Text" 
             prevAction={() => resetApp('optional_kb_upload')}
             prevActionLabel="Back"
           >
-            <div className="space-y-6 max-h-[70vh] overflow-y-auto pr-1.5 modern-scrollbar">
-              <div>
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center">
-                  <div className="h-2 w-2 bg-cyan-400 rounded-full mr-2"></div>
-                  <h3 className="text-sm font-medium text-white/90">Job Intelligence Summary</h3>
-                </div>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  className="h-7 text-xs text-white/40 hover:text-white hover:bg-white/10"
-                  onClick={() => copyToClipboard(JSON.stringify(scrapedJobData), 'Job data')}
-                >
-                  <Copy className="h-3 w-3 mr-1.5" />
+            <div className="space-y-6 max-h-[70vh] overflow-y-auto pr-1.5">
+              <AnimateIn>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-medium flex items-center">
+                    <div className="h-2 w-2 bg-primary rounded-full mr-2"></div>
+                    Job Intelligence Summary
+                  </h3>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="h-7 text-xs text-foreground/50 hover:text-foreground"
+                    onClick={() => copyToClipboard(JSON.stringify(scrapedJobData), 'Job data')}
+                  >
+                    <Copy className="h-3 w-3 mr-1.5" />
                     Copy Job Data
-                </Button>
-              </div>
-              <div className="frost-glass rounded-xl overflow-hidden border border-white/10">
-                <JobDataDisplay data={scrapedJobData} />
-              </div>
-              {jobUrl && jobInputUIMode === 'link' && (
-                <Button 
-                  variant="link" 
-                  size="sm" 
-                  className="p-0 h-auto mt-3 text-cyan-500 hover:text-cyan-400 transition-colors" 
-                  asChild
-                >
-                  <a href={jobUrl} target="_blank" rel="noopener noreferrer">
-                    View Original Job Posting <ExternalLink className="ml-1 h-3 w-3"/>
-                  </a>
-                </Button>
-              )}
-              </div>
-              <Separator className="bg-neutral-800/60"/>
-              <div>
-                 <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center">
-                    <div className="h-2 w-2 bg-purple-400 rounded-full mr-2"></div>
-                    <h3 className="text-sm font-medium text-white/90">Initial ATS Assessment</h3>
-                  </div>
+                  </Button>
                 </div>
-                <AtsScoreResultDisplay 
-                  scoreData={originalAts} 
-                  titlePrefix="Current Resume"
-                  onCopy={copyToClipboard}
-                />
-              </div>
+                <div className="glass-card bg-card/20 rounded-xl overflow-hidden">
+                  <JobDataDisplay data={scrapedJobData} />
+                </div>
+                {jobUrl && jobInputUIMode === 'link' && (
+                  <Button 
+                    variant="link" 
+                    size="sm" 
+                    className="p-0 h-auto mt-3" 
+                    asChild
+                  >
+                    <a href={jobUrl} target="_blank" rel="noopener noreferrer">
+                      View Original Job Posting <ExternalLink className="ml-1 h-3 w-3"/>
+                    </a>
+                  </Button>
+                )}
+              </AnimateIn>
             </div>
           </ResultsDisplayCard>
         )}
 
-        {/* Step: Show CV Preview */}
          {appStep === 'results_cv_preview' && extractedCvText && (
           <ResultsDisplayCard 
-            title="Current Resume" 
+            title="Resume Content" 
             icon={Eye} 
-            description="Text extracted from your resume" 
+            description="Here's the text we extracted from your resume" 
             nextAction={handleProceedToAtsOriginal} 
             nextActionLabel="Run ATS Analysis" 
             prevAction={() => setAppStep('results_job_data')}
           >
-            <pre className="p-3 bg-neutral-900/40 border border-neutral-800/60 rounded-md text-xs text-neutral-300 overflow-x-auto max-h-[60vh]">{extractedCvText}</pre>
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              className="mt-2 text-neutral-500 hover:text-cyan-500 p-0 h-auto" 
-              onClick={() => copyToClipboard(extractedCvText, 'CV Text')}
-            >
-              <Copy className="mr-1 h-3 w-3"/> Copy text
-            </Button>
+            <AnimateIn>
+              <div className="glass-card bg-card/20 p-4 rounded-lg text-sm">
+                <pre className="whitespace-pre-wrap font-mono text-xs leading-relaxed h-[60vh] overflow-y-auto">{extractedCvText}</pre>
+              </div>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="mt-2 text-muted-foreground hover:text-primary p-0 h-auto" 
+                onClick={() => copyToClipboard(extractedCvText, 'CV Text')}
+              >
+                <Copy className="mr-1 h-3 w-3"/> Copy text
+              </Button>
+            </AnimateIn>
           </ResultsDisplayCard>
         )}
 
-        {/* Step: Show Original ATS */}
         {appStep === 'results_ats_original' && originalAts && (
           <ResultsDisplayCard 
-            title="Initial ATS Analysis" 
+            title="ATS Compatibility Analysis" 
             icon={FileText} 
-            description="Current resume compatibility assessment" 
+            description="How well your current resume matches the job requirements" 
             nextAction={handleProceedToGenerateResume} 
             nextActionLabel="Generate Optimized Resume" 
             prevAction={() => setAppStep('results_cv_preview')}
           >
-            <AtsScoreResultDisplay 
-              scoreData={originalAts} 
-              titlePrefix="Current" 
-              onCopy={copyToClipboard}
-            />
+            <AnimateIn>
+              <AtsScoreResultDisplay 
+                scoreData={originalAts} 
+                titlePrefix="Current Resume"
+                onCopy={copyToClipboard}
+              />
+            </AnimateIn>
           </ResultsDisplayCard>
         )}
 
-        {/* Step: Show Final Results */}
         {appStep === 'results_resume_preview' && improvedResumeMarkdown && improvedAts && (
           <ResultsDisplayCard 
-            title="Optimized Resume" 
+            title="AI-Optimized Resume" 
             icon={FileText} 
-            description="AI-enhanced resume with improved ATS compatibility" 
+            description="Your professionally tailored resume for this job application" 
             prevAction={() => setAppStep('results_ats_original')}
           >
-            <div className="space-y-6">
-              <div>
-                <h3 className="text-base font-medium text-white mb-2">Enhanced Resume:</h3>
-                <div className="prose prose-sm prose-invert max-w-none p-3 bg-neutral-900/40 border border-neutral-800/60 rounded-md max-h-96 overflow-y-auto prose-headings:text-cyan-500 prose-strong:text-white prose-a:text-amber-400 hover:prose-a:text-amber-300">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{improvedResumeMarkdown}</ReactMarkdown>
+            <div className="space-y-6 max-h-[70vh] overflow-y-auto pr-1.5">
+              <AnimateIn>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-medium flex items-center">
+                    <div className="h-2 w-2 bg-primary rounded-full mr-2"></div>
+                    Generated Resume
+                  </h3>
+                  
+                  <div className="flex space-x-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => copyToClipboard(improvedResumeMarkdown, 'Improved resume')}
+                      className="h-8 text-xs"
+                    >
+                      <Copy className="h-3 w-3 mr-1.5" />
+                      Copy Text
+                    </Button>
+                    
+                    <Button 
+                      variant="default" 
+                      size="sm" 
+                      onClick={handleDownloadDocx}
+                      className="h-8 text-xs"
+                      disabled={!docxBytesBase64}
+                    >
+                      <Download className="h-3 w-3 mr-1.5" />
+                      Download DOCX
+                    </Button>
+                  </div>
                 </div>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  className="mt-2 text-neutral-500 hover:text-cyan-500 p-0 h-auto" 
-                  onClick={() => copyToClipboard(improvedResumeMarkdown, 'Resume Markdown')}
-                >
-                  <Copy className="mr-1 h-3 w-3"/> Copy markdown
-                </Button>
-              </div>
-              
-              <Separator className="bg-neutral-800/60"/>
-              
-              <div>
-                <h3 className="text-base font-medium text-white mb-2">ATS Compatibility Analysis:</h3>
-                <AtsScoreResultDisplay 
-                  scoreData={improvedAts} 
-                  titlePrefix="Optimized" 
-                  comparisonScore={originalAts?.score}
-                  onCopy={copyToClipboard}
-                />
-              </div>
-              
-              <Separator className="bg-neutral-800/60"/>
-              
-              <div>
-                <Label htmlFor="finalOutputFilename" className="text-sm text-neutral-400">Output Filename:</Label>
-                <Input 
-                  id="finalOutputFilename" 
-                  value={outputFilename || ''} 
-                  onChange={(e) => setOutputFilename(e.target.value)} 
-                  className="mt-1 bg-neutral-900/60 border-neutral-800 text-neutral-200 focus:border-cyan-700 focus:ring-0" 
-                />
-              </div>
-              
-              {docxBytesBase64 && (
-                <Button 
-                  onClick={handleDownloadDocx} 
-                  className="w-full py-5 bg-emerald-600 hover:bg-emerald-500 text-white transition-colors"
-                >
-                  <Download className="mr-2 h-4 w-4" /> Download DOCX
-                </Button>
-              )}
-              
-              <Button 
-                variant="outline" 
-                onClick={() => resetApp()} 
-                className="w-full border-neutral-800 text-neutral-300 bg-neutral-900/60 hover:bg-neutral-800 hover:text-white transition-colors"
-              >
-                Start New Analysis
-              </Button>
+                
+                <div className="glass-card bg-card/20 rounded-xl overflow-hidden p-6">
+                  <div className="prose prose-sm prose-invert max-w-none">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {improvedResumeMarkdown}
+                    </ReactMarkdown>
+                  </div>
+                </div>
+                
+                <div className="mt-6">
+                  <div className="flex items-center mb-3">
+                    <div className="h-2 w-2 bg-secondary rounded-full mr-2"></div>
+                    <h3 className="text-sm font-medium">Improved ATS Score</h3>
+                  </div>
+                  
+                  <Card variant="outline" className="bg-card/20">
+                    <CardContent className="pt-6">
+                      <AtsScoreResultDisplay 
+                        scoreData={improvedAts} 
+                        titlePrefix="Optimized Resume"
+                        onCopy={copyToClipboard}
+                      />
+                    </CardContent>
+                  </Card>
+                </div>
+                
+                <div className="mt-4">
+                  <div className="flex items-center mb-3">
+                    <div className="h-2 w-2 bg-accent rounded-full mr-2"></div>
+                    <h3 className="text-sm font-medium">Download Options</h3>
+                  </div>
+                  
+                  <div className="flex items-end gap-4">
+                    <div className="flex-1">
+                      <Label className="text-xs mb-1.5 block text-muted-foreground">
+                        Filename
+                      </Label>
+                      <Input 
+                        value={outputFilename}
+                        onChange={(e) => setOutputFilename(e.target.value)}
+                        className="h-9 text-sm"
+                      />
+                    </div>
+                    <MotionButton 
+                      variant="gradient" 
+                      onClick={handleDownloadDocx}
+                      disabled={!docxBytesBase64}
+                      className="h-9"
+                    >
+                      <Download className="h-4 w-4 mr-1.5" />
+                      Download Resume
+                    </MotionButton>
+                  </div>
+                </div>
+                
+                <div className="mt-8 flex justify-center">
+                  <MotionButton 
+                    variant="outline"
+                    onClick={() => resetApp('initial_input')} 
+                    className="mx-auto"
+                  >
+                    Start New Optimization
+                  </MotionButton>
+                </div>
+              </AnimateIn>
             </div>
           </ResultsDisplayCard>
         )}

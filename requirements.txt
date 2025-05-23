@@ -30,9 +30,3 @@ google-cloud-storage
 docx2txt
 beautifulsoup4
 pandas
-flake8
-black
-pre-commit
-pytest-cov
-redis[hiredis]
-celery

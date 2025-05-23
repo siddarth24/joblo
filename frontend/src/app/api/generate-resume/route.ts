@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import config from '@/config';
 
-/**
- * API endpoint to generate an improved resume based on job description and original resume
- */
 export async function POST(request: NextRequest) {
   try {
     // Get the API URL from configuration
@@ -27,8 +24,9 @@ export async function POST(request: NextRequest) {
     }
     
     // Return the response from the backend
-    const data = await backendResponse.json();
-    return NextResponse.json({ success: true, data });
+    const flaskData = await backendResponse.json();
+    console.log('API response data from Flask (/generate-resume):', JSON.stringify(flaskData));
+    return NextResponse.json(flaskData);
   } catch (error) {
     console.error('Error generating improved resume:', error);
     return NextResponse.json({ 

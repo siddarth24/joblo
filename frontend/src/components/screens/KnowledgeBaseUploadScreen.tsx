@@ -1,8 +1,8 @@
 import React from 'react';
-import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
-import { Send, UploadCloud, XCircle, FileText } from 'lucide-react';
-import { FilePlus2 } from 'lucide-react';
+import { Button, MotionButton } from '@/components/ui/button';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter, AnimateIn } from '@/components/ui/card';
+import { ChevronRight, Upload, XCircle, FileText, Database } from 'lucide-react';
+import { motion } from 'framer-motion';
 
 interface KnowledgeBaseUploadScreenProps {
   handleAttachKbClick: () => void;
@@ -21,70 +21,92 @@ const KnowledgeBaseUploadScreen: React.FC<KnowledgeBaseUploadScreenProps> = ({
 }) => {
   return (
     <div 
-      className="fixed inset-0 z-[95] flex flex-col items-center justify-center bg-black/90 backdrop-blur-md p-4 transition-opacity duration-300 ease-in-out" 
+      className="fixed inset-0 z-[95] flex flex-col items-center justify-center p-6 transition-opacity duration-500 ease-in-out" 
       style={{ opacity: isVisible ? 1 : 0, visibility: isVisible ? 'visible' : 'hidden' }}
     >
-      <div className="aurora-bg opacity-30">
-        <div className="aurora-gradient aurora-g1"></div>
-        <div className="aurora-gradient aurora-g2"></div>
+      <div className="absolute inset-0 overflow-hidden">
+        <div className="absolute -top-[40%] -left-[20%] w-[80%] h-[70%] rounded-full bg-primary/5 blur-3xl"></div>
+        <div className="absolute -bottom-[40%] -right-[20%] w-[80%] h-[70%] rounded-full bg-secondary/5 blur-3xl"></div>
+        <div className="absolute bottom-[30%] left-[10%] w-[30%] h-[30%] rounded-full bg-accent/5 blur-2xl"></div>
       </div>
-      <div className="w-full max-w-md relative z-10">
-        <Card className="bg-neutral-950/80 backdrop-blur-md border-neutral-800/60 shadow-xl">
-          <CardHeader className="pb-4">
-            <CardTitle className="flex items-center text-xl text-white">
-              <FilePlus2 className="mr-3 h-5 w-5 text-cyan-500" /> Knowledge Files
-            </CardTitle>
-            <CardDescription className="text-neutral-400">Enhance with additional context (optional)</CardDescription>
+      
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+        className="w-full max-w-md relative z-10"
+      >
+        <Card variant="glass" className="backdrop-blur-xl border-white/10">
+          <CardHeader className="pb-2">
+            <div className="flex items-center mb-1">
+              <div className="mr-3 p-2 rounded-lg bg-secondary/10 text-secondary">
+                <Database className="h-5 w-5" />
+              </div>
+              <CardTitle>Knowledge Enhancement</CardTitle>
+            </div>
+            <CardDescription>
+              Add additional context materials to improve the accuracy of your generated resume (optional)
+            </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <Button 
-              variant="outline" 
-              onClick={handleAttachKbClick} 
-              className="w-full justify-start border-neutral-800 text-neutral-300 bg-neutral-900/60 hover:bg-neutral-800 hover:text-white transition-colors"
-            >
-              <UploadCloud className="mr-2 h-4 w-4"/> Select Files (PDF, DOCX, TXT)
-            </Button>
+          
+          <CardContent className="space-y-4 pt-4">
+            <AnimateIn delay={0.1}>
+              <Button 
+                variant="outline" 
+                onClick={handleAttachKbClick} 
+                className="w-full justify-start h-11"
+              >
+                <Upload className="mr-2 h-4 w-4"/> 
+                Select Files (PDF, DOCX, TXT)
+              </Button>
+            </AnimateIn>
             
             {knowledgeBaseFiles.length > 0 && (
-              <div className="space-y-1 max-h-36 overflow-y-auto pr-2 border border-neutral-800/60 rounded-md p-2 bg-neutral-900/30">
-                <p className="text-xs text-neutral-500 mb-1">Selected files:</p>
-                {knowledgeBaseFiles.map(file => (
-                  <div key={file.name} className="text-xs text-neutral-300 bg-neutral-900/60 px-2 py-1.5 rounded flex items-center justify-between group hover:bg-neutral-800/60 transition-colors">
-                    <span className="truncate flex items-center" title={file.name}>
-                      <FileText className="h-3 w-3 mr-1.5 text-neutral-500"/>
-                      {file.name}
-                    </span>
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      onClick={() => removeKbFile(file.name)} 
-                      className="h-5 w-5 opacity-60 hover:opacity-100 text-neutral-400 hover:text-red-400 hover:bg-red-950/20"
+              <AnimateIn delay={0.2}>
+                <div className="space-y-1 max-h-48 overflow-y-auto pr-2 border border-white/20 rounded-lg p-3 bg-card/30">
+                  <p className="text-xs text-muted-foreground mb-2">Selected files:</p>
+                  {knowledgeBaseFiles.map(file => (
+                    <div 
+                      key={file.name} 
+                      className="text-sm bg-card/40 px-3 py-2 rounded-md flex items-center justify-between group hover:bg-card/60 transition-colors"
                     >
-                      <XCircle className="h-3 w-3" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
+                      <span className="truncate flex items-center flex-1 mr-2" title={file.name}>
+                        <FileText className="h-3.5 w-3.5 mr-2 text-muted-foreground"/>
+                        {file.name}
+                      </span>
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        onClick={() => removeKbFile(file.name)} 
+                        className="h-6 w-6 p-0 hover:text-destructive hover:bg-destructive/10 rounded-full"
+                      >
+                        <XCircle className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </AnimateIn>
             )}
           </CardContent>
-          <CardFooter className="flex justify-between pt-2">
+          
+          <CardFooter className="flex justify-between pt-4 border-t border-white/10">
             <Button 
               variant="ghost" 
               onClick={() => startFullProcessing(true)} 
-              className="text-neutral-500 hover:text-neutral-300 transition-colors"
+              className="text-muted-foreground hover:text-foreground"
             >
-              Skip
+              Skip for now
             </Button>
-            <Button 
+            <MotionButton 
+              variant="default"
               onClick={() => startFullProcessing(false)} 
-              className="bg-cyan-700 hover:bg-cyan-600 text-white transition-colors"
             >
               Continue
-              <Send className="ml-2 h-4 w-4" />
-            </Button>
+              <ChevronRight className="ml-1 h-4 w-4" />
+            </MotionButton>
           </CardFooter>
         </Card>
-      </div>
+      </motion.div>
     </div>
   );
 };

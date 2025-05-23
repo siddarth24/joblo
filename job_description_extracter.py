@@ -43,7 +43,6 @@ def adaptive_scraper(url, groq_api_key):
 
 # Main function to run the adaptive scraper
 if __name__ == "__main__":
-
     # Validate API keys
     validate_api_keys()
 

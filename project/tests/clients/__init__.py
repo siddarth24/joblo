@@ -1,1 +1,0 @@
-# This file makes Python treat the 'clients' directory as a package.

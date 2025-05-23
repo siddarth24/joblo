@@ -2,26 +2,21 @@
 
 import React, { useState, ChangeEvent, useCallback, useEffect, useRef } from 'react';
 import { ThemeProvider, useTheme } from 'next-themes';
-import { Toaster, toast } from 'sonner';
+import { toast } from 'sonner';
 
-// Types
 import { AppStep, JobInputUIMode, AtsScore, JobData, ProcessingResult, ApiResponse } from '@/types';
 
-// Components
-import Header from '@/components/joblo/Header';
 import InitialInputScreen from '@/components/screens/InitialInputScreen';
 import KnowledgeBaseUploadScreen from '@/components/screens/KnowledgeBaseUploadScreen';
 import LoadingScreen from '@/components/screens/LoadingScreen';
 import ResultsScreen from '@/components/screens/ResultsScreen';
 import ErrorScreen from '@/components/screens/ErrorScreen';
 
-// Services
 import { 
   processJobApplication,
   checkApiHealth
 } from '@/services/api';
 
-// --- Main Application Component ---
 const App: React.FC = () => {
   const { theme, setTheme } = useTheme();
   const [appStep, setAppStep] = useState<AppStep>('initial_input');
@@ -50,7 +45,6 @@ const App: React.FC = () => {
     }
   }, [theme, setTheme]);
 
-  // Handlers to be passed as props, memoized with useCallback
   const memoizedSetJobInputUIMode = useCallback((mode: JobInputUIMode) => setJobInputUIMode(mode), []);
   const memoizedSetJobUrl = useCallback((url: string) => setJobUrl(url), []);
   const memoizedSetJobDescription = useCallback((desc: string) => setJobDescription(desc), []);
@@ -63,7 +57,7 @@ const App: React.FC = () => {
       setResumeFile(event.target.files[0]);
       toast.success(`Resume selected: ${event.target.files[0].name}`);
     }
-    if (event.target) event.target.value = ""; // Clear input for re-selection
+    if (event.target) event.target.value = ""; 
   }, []);
 
   const handleKbFilesChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
@@ -72,7 +66,7 @@ const App: React.FC = () => {
       setKnowledgeBaseFiles(prev => [...prev, ...filesArray]);
       toast.success(`${filesArray.length} knowledge file(s) added.`);
     }
-    if (event.target) event.target.value = ""; // Clear input
+    if (event.target) event.target.value = ""; 
   }, []);
 
   const removeResumeFile = useCallback(() => {
@@ -124,7 +118,7 @@ const App: React.FC = () => {
       setIsLoadingMessage('Deconstructing Job Posting & Parsing Resume...');
       
       const isHealthy = await checkApiHealth();
-      console.log('API health check:', isHealthy); // Keep for basic health check visibility
+      console.log('API health check:', isHealthy); 
       
       if (!isHealthy) {
         throw new Error("API service is currently unavailable. Please try again later.");
@@ -132,7 +126,7 @@ const App: React.FC = () => {
 
       console.log('Sending process job application request');
       const response = await processJobApplication(formData);
-      console.log('Process job application response:', response); // Keep for initial data visibility
+      console.log('Process job application response:', response); 
       
       if (!response.success || !response.data) {
         toast.error(response.error || "Failed to process application. Please check inputs and API logs.");
@@ -147,14 +141,11 @@ const App: React.FC = () => {
       
       setScrapedJobData(result.jobData);
       setExtractedCvText(result.extractedCvText);
-      // The initial response should now contain the original ATS score directly from the backend
       if (result.originalAts) {
         console.log('Setting original ATS from initial processing:', result.originalAts);
         setOriginalAts(result.originalAts);
       } else {
-        // This case should ideally not happen if backend is structured correctly for initial ATS
         console.warn('Original ATS score not found in initial process-job-application response.');
-        // Optionally, trigger an error or a specific state if original ATS is critical here
       }
 
       if (result.outputFilename) {
@@ -184,7 +175,7 @@ const App: React.FC = () => {
     console.log('[CLIENT handleProceedToAtsOriginal] State before fetch:', { 
       scrapedJobData: !!scrapedJobData,
       extractedCvText: !!extractedCvText,
-      originalAts: originalAts // Log current originalAts state
+      originalAts: originalAts 
     });
     try {
       const formData = new FormData();
@@ -199,7 +190,7 @@ const App: React.FC = () => {
         body: formData,
       });
       
-      const resultText = await response.text(); // Get text first to avoid issues with response.json() being called twice
+      const resultText = await response.text(); 
       console.log('[CLIENT handleProceedToAtsOriginal] Raw response text:', resultText);
       const result = JSON.parse(resultText);
       console.log('[CLIENT handleProceedToAtsOriginal] Parsed fetch result:', result);
@@ -220,7 +211,7 @@ const App: React.FC = () => {
       toast.error((error as Error).message || "ATS analysis failed."); 
       setAppStep('error'); 
     }
-  }, [scrapedJobData, extractedCvText, originalAts]); // Added originalAts to dependency array as it's logged, though not strictly necessary for the logic itself
+  }, [scrapedJobData, extractedCvText, originalAts]); 
   
   const handleProceedToGenerateResume = useCallback(async () => {
     if (!scrapedJobData || !extractedCvText || !originalAts) {
@@ -234,17 +225,17 @@ const App: React.FC = () => {
       const formData = new FormData();
       formData.append('jobData', JSON.stringify(scrapedJobData));
       formData.append('cvText', extractedCvText || '');
-      formData.append('atsScore', JSON.stringify(originalAts)); // Send original ATS for context
+      formData.append('atsScore', JSON.stringify(originalAts)); 
       
       knowledgeBaseFiles.forEach(file => formData.append('kbFiles', file));
       
-      const response = await fetch('/api/generate-resume', { // This calls the Next.js API route
+      const response = await fetch('/api/generate-resume', { 
         method: 'POST',
         body: formData,
       });
       
       const result = await response.json();
-      console.log('Generate resume response:', result); // For debugging
+      console.log('Generate resume response:', result); 
 
       if (!result.success || !result.data) {
         toast.error(result.error || "Failed to generate improved resume. Data missing from response.");
@@ -270,7 +261,6 @@ const App: React.FC = () => {
       return; 
     }
     
-    // Check if we're dealing with mock data
     if (docxBytesBase64.includes("(mocked)")) {
       toast.info("Mock data detected. In production, this would download a real DOCX file.");
       return;
@@ -319,16 +309,15 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#050a14] to-black text-white flex flex-col font-sans relative overflow-hidden">
-      {/* Render global background only when no overlay is fully visible */}
       {appStep === 'initial_input' && (
         <div className="aurora-bg">
           <div className="aurora-gradient aurora-g1"></div>
           <div className="aurora-gradient aurora-g2"></div>
+          <div className="particle-bg"></div>
+          <div className="circuit-pattern absolute inset-0 opacity-30"></div>
         </div>
       )}
 
-      <Header />
-      
       <div className="flex-grow flex flex-col relative z-10">
         {appStep === 'initial_input' && (
           <InitialInputScreen
@@ -350,7 +339,6 @@ const App: React.FC = () => {
         )}
       </div>
 
-      {/* These components are mounted but visibility controlled by their props */}
       <KnowledgeBaseUploadScreen 
         handleAttachKbClick={handleAttachKbClick}
         knowledgeBaseFiles={knowledgeBaseFiles}
@@ -398,8 +386,6 @@ const App: React.FC = () => {
         isError={appStep === 'error'} 
         resetApp={resetApp} 
       />
-      
-      <Toaster theme="dark" position="bottom-right" closeButton richColors />
     </div>
   );
 };

@@ -6,8 +6,12 @@ import os
 # This is necessary because the client might be used in contexts where joblo_core's path isn't set up,
 # e.g. if this client were to be used by a standalone script or a different part of a larger system.
 # For Flask app context, this might be redundant if sys.path is already managed, but good for robustness.
-module_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')) # project/
-workspace_root = os.path.abspath(os.path.join(module_path, os.pardir)) # one level up from project/
+module_path = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "..")
+)  # project/
+workspace_root = os.path.abspath(
+    os.path.join(module_path, os.pardir)
+)  # one level up from project/
 if workspace_root not in sys.path:
     sys.path.insert(0, workspace_root)
     # print(f"SCRAPER_CLIENT: Added {workspace_root} to sys.path") # Optional: for debugging path issues
@@ -25,6 +29,7 @@ except ImportError as e:
 
 logger = logging.getLogger(__name__)
 
+
 class ScraperClient:
     def __init__(self, groq_api_key: str = None):
         """
@@ -34,7 +39,9 @@ class ScraperClient:
                                          Can be None if only scrapers not requiring it are used (e.g. LinkedIn direct).
         """
         self.groq_api_key = groq_api_key
-        logger.info(f"ScraperClient initialized. Groq API key provided: {bool(self.groq_api_key)}")
+        logger.info(
+            f"ScraperClient initialized. Groq API key provided: {bool(self.groq_api_key)}"
+        )
 
     def scrape_job_data(self, url: str) -> dict:
         """
@@ -56,7 +63,10 @@ class ScraperClient:
             raise ValueError("A valid URL must be provided for scraping.")
 
         try:
-            if "linkedin.com/jobs/view/" in url.lower() or "linkedin.com/jobs/collections/" in url.lower():
+            if (
+                "linkedin.com/jobs/view/" in url.lower()
+                or "linkedin.com/jobs/collections/" in url.lower()
+            ):
                 logger.info(f"ScraperClient: Using LinkedIn scraper for URL: {url}")
                 # scrape_linkedin_job might require groq_api_key for some functionalities or fallbacks
                 job_data = scrape_linkedin_job(url, self.groq_api_key)
@@ -71,14 +81,20 @@ class ScraperClient:
         except Exception as e:
             # Catching a broad exception here as underlying scrapers can raise various things.
             # Specific exceptions from scrapers (if any defined and common) could be caught too.
-            logger.error(f"ScraperClient: Error during scraping URL {url}: {e}", exc_info=True)
+            logger.error(
+                f"ScraperClient: Error during scraping URL {url}: {e}", exc_info=True
+            )
             # Raise a more generic error to simplify handling by the caller.
             # If scrapers have specific retryable errors, those could be handled or re-raised specifically.
             raise ConnectionError(f"Failed to scrape job data from {url} due to: {e}")
 
         if not job_data:
-            logger.error(f"ScraperClient: Failed to retrieve any job data from URL: {url}")
-            raise ValueError(f"No job data could be retrieved from {url}. The scraper might have failed silently or the content was not found/parsable.")
-        
+            logger.error(
+                f"ScraperClient: Failed to retrieve any job data from URL: {url}"
+            )
+            raise ValueError(
+                f"No job data could be retrieved from {url}. The scraper might have failed silently or the content was not found/parsable."
+            )
+
         logger.info(f"ScraperClient successfully scraped job data from URL: {url}")
-        return job_data 
+        return job_data

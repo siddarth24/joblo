@@ -1,7 +1,6 @@
 import os
 
 class Config:
-    \"\"\"Configuration for the Flask application.\"\"\"
     DEBUG = os.environ.get("FLASK_DEBUG", "False").lower() in ["true", "1", "t"]
     PORT = int(os.environ.get("PORT", 5500))
     HOST = os.environ.get("HOST", "0.0.0.0")

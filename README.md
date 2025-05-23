@@ -95,114 +95,130 @@ Ensure your `.env` file is populated with these variables as needed. For local d
 
 ## Running the Application
 
-To run Joblo, you need to start the Flask backend, the Celery worker(s), and the Next.js frontend. Ensure your Redis server is also running.
+To run Joblo, you can use the provided `start.sh` script, which simplifies the process, or use Docker Compose directly.
 
-### 1. Start Redis Server
+### Using the `start.sh` script (Recommended)
 
-If you don't have a Redis instance running, you can start one locally (e.g., using Docker or a native installation).
-Example with Docker:
-```bash
-docker run -d -p 6379:6379 redis
-```
-Make sure your `.env` file points to this Redis instance (defaults usually work for local `redis` at `localhost:6379`).
-
-### 2. Start the Backend (Flask Application)
-
-Navigate to the workspace root (`joblo/`) and activate your virtual environment if you haven't already.
+The `start.sh` script in the project root provides several options:
 
 ```bash
-# Ensure your .env file is configured correctly in the workspace root
-python project/run.py
+./start.sh [docker | local | frontend-only | stop]
 ```
-This will typically start the Flask development server (e.g., on `http://localhost:5500` as per config).
 
-### 3. Start the Celery Worker(s)
+-   **`./start.sh docker`** (or `./start.sh` if Docker Compose is installed):
+    This is the **recommended** method. It uses `docker-compose up --build -d` to build and start all services (Flask backend, Celery worker, Redis, and Next.js frontend) in detached mode. Logs can be viewed with `docker-compose logs -f`.
 
-In a **new terminal window**, navigate to the workspace root (`joblo/`) and activate your virtual environment.
+-   **`./start.sh local`**:
+    Starts the Flask backend, Celery worker(s), and the Next.js frontend directly on your local machine. It will also attempt to start a Redis container using Docker if one isn't detected and Docker is available. Otherwise, it assumes Redis is already running and accessible. You'll need your Python virtual environment activated for this.
+    Services are run in the background. Press `Ctrl+C` in the terminal where you ran the script to stop these locally started services.
 
-```bash
-# Ensure your .env file is configured and accessible by the Celery worker
-celery -A project.celery_app.celery worker -l info
-```
-This starts a Celery worker that will pick up tasks from the queue (e.g., resume generation, scraping).
-You can add `-P eventlet` or `-P gevent` for concurrency on I/O-bound tasks if needed, or run multiple workers.
+-   **`./start.sh frontend-only`**:
+    Starts only the Next.js frontend development server locally.
 
-### 4. Start the Frontend (Next.js Development Server)
+-   **`./start.sh stop`**:
+    Stops the services that were started using `./start.sh local` (by killing the PIDs saved by the script).
+    It will also remind you to use `docker-compose down` if you used the `docker` mode.
 
-In **another new terminal window**, navigate to the `frontend/` directory:
+Ensure your `.env` file is configured in the project root. The `start.sh` script will load it for `local` mode, and Docker Compose uses it automatically.
 
-```bash
-cd frontend
-npm run dev # or yarn dev
-```
-This will typically start the frontend on `http://localhost:3000`.
+### Using Docker Compose Directly
+
+If you prefer, you can manage the services directly with Docker Compose:
+
+1.  **Ensure your `.env` file is configured** in the project root.
+2.  **Navigate to the workspace root** (`joblo/`).
+3.  **Build and start all services**: `docker-compose up --build -d`
+4.  **View logs**: `docker-compose logs -f [service_name]` (e.g., `backend`, `worker`, `frontend`, `redis`)
+5.  **Stop services**: `docker-compose down` (add `-v` to remove volumes like Redis data).
+
+### Manual Startup (Legacy - not recommended, refer to `start.sh local` logic)
+
+(Previous manual instructions for starting Redis, Backend, Celery, and Frontend separately are now encapsulated and improved in `./start.sh local` or handled by `docker-compose`.)
 
 ### Accessing the Application
 
--   **Frontend**: Open your browser and go to `http://localhost:3000` (or as configured).
--   **Backend API**: Accessible at `http://localhost:5500` (or as configured).
+-   **Frontend**: Typically `http://localhost:3000`
+-   **Backend API**: Typically `http://localhost:5500`
 
-*(Note: The original `./start.sh` script may need to be updated to reflect these new components and steps. For now, follow the manual steps above.)*
+These ports are defined in `docker-compose.yml` and are the defaults for local runs as well.
 
-## API Endpoints
+## Running with Docker (Recommended for Development & Production)
 
-All API endpoints are prefixed with `/api` (this prefix is added by the Nginx reverse proxy in a typical deployment, or can be configured in Flask if run directly without a proxy. Assuming direct Flask for now, no extra prefix in these definitions unless specified by blueprint registration).
+This project includes Docker configuration to simplify setup and ensure consistency across environments. The `docker-compose.yml` file defines the `backend`, `worker`, `redis`, and `frontend` services.
 
-**Base URL for processing endpoints (from `processing_bp`): `/` (relative to app root)**
+### Prerequisites
 
--   `POST /process-job-application`: Initiates job application processing. Handles resume upload, text extraction, then either starts job scraping (if URL provided) or ATS analysis (if job description provided). Returns task ID(s).
--   `POST /analyze-ats`: Initiates ATS analysis of a resume against a job description. Requires `jobData` (JSON string) and `cvText`. Returns a task ID for LLM-based analysis.
--   `POST /generate-resume`: Initiates the full resume generation workflow. Takes job details, base resume (text or file), optional knowledge base files, and an output filename base. Returns a task ID for the chained generation and conversion process.
--   `POST /convert-to-docx`: Converts Markdown content to a DOCX file. Accepts `markdownContent` or a `inputMarkdownFilePath`. Returns a task ID for the conversion.
--   `GET /tasks/<task_id>/status`: Retrieves the status and result (or error) of an asynchronous Celery task.
+-   Docker Desktop (or Docker Engine + Docker Compose) installed.
+-   A configured `.env` file in the project root (see "Environment Variables" section). Docker Compose will automatically load variables from this file.
 
-**LinkedIn Endpoints (from `linkedin_bp`): `/linkedin`**
+### Building and Running with Docker Compose
 
--   `POST /linkedin/authenticate`: Authenticates using a LinkedIn session ID stored in Redis. (Note: Original functionality using file-based state is replaced by Redis).
--   `POST /linkedin/state`: Stores LinkedIn session data (associated with a unique ID) in Redis.
--   `GET /linkedin/state/<unique_id>`: Retrieves stored LinkedIn session data from Redis.
--   `DELETE /linkedin/state/<unique_id>`: Deletes stored LinkedIn session data from Redis.
-
-**Main/Health Endpoints (from `main_bp`): `/`**
-
--   `GET /health`: Health check endpoint. Verifies that the API is running.
-
-## Project Structure
-
+As mentioned above, the easiest way is to use the `start.sh` script:
+```bash
+./start.sh docker
 ```
-joblo/
-├── project/                  # Main Flask application package
-│   ├── app/                  # Core application module
-│   │   ├── __init__.py       # Application factory (create_app)
-│   │   ├── main/             # Main blueprint (e.g., health checks)
-│   │   │   ├── __init__.py
-│   │   │   └── routes.py
-│   │   ├── linkedin/         # LinkedIn blueprint
-│   │   │   ├── __init__.py
-│   │   │   └── routes.py
-│   │   ├── processing/       # Processing blueprint (job/resume tasks)
-│   │   │   ├── __init__.py
-│   │   │   └── routes.py
-│   │   ├── prompts/          # Directory for LLM prompt .txt files
-│   │   │   ├── ats_analysis.txt
-│   │   │   └── resume_generation.txt
-│   │   ├── services.py       # Business logic layer
-│   │   └── utils.py          # Shared utility functions
-│   ├── celery_app.py       # Celery application factory and configuration
-│   ├── config.py           # Flask configuration classes (loads from .env)
-│   ├── run.py              # Script to run the Flask application
-│   └── tasks.py            # Celery task definitions
-├── frontend/                 # Next.js frontend application
-│   ├── ... (standard Next.js structure)
-├── joblo_core.py           # Core AI logic, RAG, external API interactions (OpenAI, CloudConvert, Groq)
-├── knowledge_base.py       # Knowledge base processing (RAG components)
-├── requirements.txt          # Python dependencies
-├── .env.example              # Example environment variables template
-├── .env                      # Environment variables (GITIGNORED)
-├── create_env.sh           # Optional: Script to create .env from .env.example
-├── start.sh                # Optional: Script to start backend, frontend, celery (MAY NEED UPDATES)
-└── README.md               # This file
+Or directly:
+```bash
+# Ensure you are in the joblo/ workspace root
+docker-compose up --build -d
 ```
+
+-   `--build`: Forces Docker to rebuild the images if the Dockerfile or application code has changed.
+-   `-d`: Runs containers in detached mode (in the background).
+
+### To view logs:
+```bash
+docker-compose logs -f            # View logs for all services
+docker-compose logs -f backend    # View logs for the backend service
+docker-compose logs -f worker     # View logs for the Celery worker service
+docker-compose logs -f frontend   # View logs for the frontend service
+docker-compose logs -f redis      # View logs for the Redis service
+```
+
+### To stop the services:
+```bash
+docker-compose down
+```
+To stop and remove volumes (like Redis data, if you want a clean start):
+```bash
+docker-compose down -v
+```
+
+### Accessing Services via Docker
+
+-   **Frontend UI**: `http://localhost:3000`
+-   **Backend API**: `http://localhost:5500` (or the port mapped in `docker-compose.yml`).
+-   **Redis**: Accessible to other Docker services at `redis:6379`. If you mapped the port to the host, it's also at `localhost:6379`.
+
+### Notes on Docker Setup
+
+-   **System Dependencies**: The `Dockerfile` and `Dockerfile.celery` include commands to install system dependencies like `tesseract-ocr`, `libgl1-mesa-glx`, and `poppler-utils` which are required by some Python libraries.
+-   **Gunicorn**: The backend service uses Gunicorn as the WSGI server, as specified in the `Dockerfile`.
+-   **Environment Variables**: Ensure your `.env` file is correctly populated. Docker Compose makes these variables available to the services.
+-   **Volumes**: The `docker-compose.yml` includes an optional named volume `redis_data` for Redis persistence. Log directories can also be mounted from the host for easier inspection during development.
+
+## Testing
+
+To run the tests locally:
+```bash
+pytest
+```
+
+To run tests with coverage (ensure `pytest-cov` is installed):
+```bash
+pytest --cov=project/app --cov-config=.coveragerc
+```
+This will generate an HTML report in the `htmlcov/` directory and an XML report (`coverage.xml`). Open `htmlcov/index.html` in your browser to view the detailed HTML report.
+
+## CI/CD
+
+This project uses GitHub Actions for Continuous Integration. The workflow is defined in `.github/workflows/ci.yml` and includes the following steps:
+- Linting with Black and Flake8.
+- Running unit and integration tests with pytest.
+- Generating test coverage reports (HTML and XML).
+- Optionally, uploading coverage reports to Codecov (requires `CODECOV_TOKEN` secret in the GitHub repository).
+
+The CI pipeline is automatically triggered on pushes and pull requests to the `main` branch.
 
 ## Contributing
 

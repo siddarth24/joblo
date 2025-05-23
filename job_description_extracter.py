@@ -12,6 +12,7 @@ load_dotenv()
 # Retrieve API keys from environment variables
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
+
 # Function to validate the presence of required API keys
 def validate_api_keys():
     missing_keys = []
@@ -20,11 +21,15 @@ def validate_api_keys():
 
     if missing_keys:
         missing = ", ".join(missing_keys)
-        print(f"Error: The following API key(s) are missing: {missing}. Please set them in your .env file.")
+        print(
+            f"Error: The following API key(s) are missing: {missing}. Please set them in your .env file."
+        )
         sys.exit("Exiting due to missing API key(s).")
+
 
 # Print to confirm the script execution starts
 print("Script execution started.")
+
 
 def adaptive_scraper(url, groq_api_key):
     # Check if the URL is a LinkedIn URL
@@ -34,6 +39,7 @@ def adaptive_scraper(url, groq_api_key):
     else:
         print("Detected non-LinkedIn URL. Using alternative scraper.")
         return main_adaptive_scraper(url, groq_api_key)
+
 
 # Main function to run the adaptive scraper
 if __name__ == "__main__":

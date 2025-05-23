@@ -14,14 +14,16 @@ import numpy as np
 from langchain.docstore.document import Document as LangDocument
 import docx2txt
 
+
 ###########################################################################
 # 1) PLACEHOLDER: OllamaEmbeddings
 ###########################################################################
 class OllamaEmbeddings(Embeddings):
     """
-    Placeholder for Ollama-based embeddings. 
+    Placeholder for Ollama-based embeddings.
     Replace `_call_ollama_embedding` with your actual logic to call Ollama.
     """
+
     def __init__(self, model_name: str = "llama2"):
         self.model_name = model_name
 
@@ -51,20 +53,22 @@ def _extract_text_from_pdf(file_path: str) -> str:
             page_text = page.extract_text()
             if page_text:
                 text += page_text + "\n"
-    
+
     # If no text was extracted, use OCR as a fallback
     if not text.strip():
         images = convert_from_path(file_path)  # Convert PDF pages to images
         for img in images:
             ocr_text = pytesseract.image_to_string(img)  # Extract text using OCR
             text += ocr_text + "\n"
-    
+
     return text.strip()  # Return extracted text
 
+
 def _extract_text_from_txt(file_path: str) -> str:
-    """ Extract text from a .txt file. """
+    """Extract text from a .txt file."""
     with open(file_path, "r", encoding="utf-8") as f:
         return f.read()
+
 
 def _extract_text_from_docx(file_path: str) -> str:
     """
@@ -85,14 +89,14 @@ def _extract_text_from_docx(file_path: str) -> str:
                     text_main += cell.text + "\n"
     except Exception as e:
         print(f"python-docx extraction error in {file_path}: {e}")
-    
+
     # Fallback extraction using docx2txt
     try:
         text_alt = docx2txt.process(file_path)
     except Exception as e:
         print(f"docx2txt extraction error in {file_path}: {e}")
         text_alt = ""
-    
+
     # Combine the outputs and return the consolidated text
     combined_text = (text_main + "\n" + text_alt).strip()
     return combined_text
@@ -120,7 +124,10 @@ def _build_in_memory_vector_store(file_paths: List[str]) -> FAISS:
             continue  # Skip unknown file types
 
         if text.strip():
-            doc = LangDocument(page_content=text if text.strip() else "No content extracted", metadata={"source": path})
+            doc = LangDocument(
+                page_content=text if text.strip() else "No content extracted",
+                metadata={"source": path},
+            )
             docs.append(doc)
     # Split into chunks
     splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
@@ -137,6 +144,7 @@ def _build_in_memory_vector_store(file_paths: List[str]) -> FAISS:
     vector_store = FAISS.from_documents(chunked_docs, embeddings)
     return vector_store
 
+
 def _retrieve_relevant_chunks(vector_store: FAISS, query: str, top_k: int) -> List[str]:
     """
     Given a vector store and a query, retrieve the top_k relevant chunks.
@@ -150,13 +158,19 @@ def _retrieve_relevant_chunks(vector_store: FAISS, query: str, top_k: int) -> Li
 # 4) Flexible Filtering Function
 ###########################################################################
 RELEVANT_KEYWORDS = [
-    "skills", "responsibilities", "requirements", "nice", "experience", "qualifications"
+    "skills",
+    "responsibilities",
+    "requirements",
+    "nice",
+    "experience",
+    "qualifications",
 ]
+
 
 def filter_relevant_keys(data, relevant_keywords=RELEVANT_KEYWORDS):
     """
-    Recursively filter a dict (data) to retain only the keys 
-    whose name or subkeys' names contain any of the keywords 
+    Recursively filter a dict (data) to retain only the keys
+    whose name or subkeys' names contain any of the keywords
     in `relevant_keywords`.
     """
     if not isinstance(data, dict):
@@ -200,12 +214,12 @@ def re_rank_chunks(
     chunks: List[str],
     job_description: str,
     embeddings: OllamaEmbeddings,
-    top_k: int = 5
+    top_k: int = 5,
 ) -> List[str]:
     """
     Given an initial list of retrieved chunks and the job description text,
     re-rank the chunks by their similarity to the job description.
-    
+
     1. Embed each chunk with OllamaEmbeddings.
     2. Embed the job_description text with OllamaEmbeddings.
     3. Compute cosine similarity between each chunk embedding and the job_description embedding.
@@ -213,7 +227,7 @@ def re_rank_chunks(
     """
     if not chunks:
         return []
-    
+
     # Embed the chunks
     chunk_embeddings = embeddings.embed_documents(chunks)
 
@@ -221,7 +235,9 @@ def re_rank_chunks(
     job_desc_embedding = embeddings.embed_query(job_description)
 
     # Compute cosine similarity: shape -> (#chunks, 1)
-    sims = cosine_similarity(np.array(chunk_embeddings), np.array([job_desc_embedding])).flatten()
+    sims = cosine_similarity(
+        np.array(chunk_embeddings), np.array([job_desc_embedding])
+    ).flatten()
 
     # Sort chunks by similarity score in descending order
     chunk_scores = sorted(zip(chunks, sims), key=lambda x: x[1], reverse=True)
@@ -235,10 +251,7 @@ def re_rank_chunks(
 # 6) Main RAG Function to Call from Joblo.py (with Re-Ranking)
 ###########################################################################
 def extract_relevant_chunks(
-    file_paths: List[str],
-    job_data: dict,
-    top_k: int = 5,
-    re_rank: bool = True
+    file_paths: List[str], job_data: dict, top_k: int = 5, re_rank: bool = True
 ) -> List[str]:
     """
     1. Filters the job_data to only include relevant keys.
@@ -261,7 +274,9 @@ def extract_relevant_chunks(
     query_lines = []
     for key, value in filtered_job_data.items():
         if isinstance(value, list):
-            query_lines.append(f"{key.capitalize()}: {', '.join(str(v) for v in value)}")
+            query_lines.append(
+                f"{key.capitalize()}: {', '.join(str(v) for v in value)}"
+            )
         else:
             query_lines.append(f"{key.capitalize()}: {value}")
     query = "\n".join(query_lines)
@@ -279,7 +294,9 @@ def extract_relevant_chunks(
 
         embeddings = OllamaEmbeddings()
         # Now re-rank these chunks against the full job description text
-        final_chunks = re_rank_chunks(retrieved_chunks, job_description_text, embeddings, top_k=top_k)
+        final_chunks = re_rank_chunks(
+            retrieved_chunks, job_description_text, embeddings, top_k=top_k
+        )
         return final_chunks
     else:
         # If no re-ranking needed or empty retrieval, just return the original top_k chunks

@@ -7,6 +7,7 @@ from docx import Document
 from pdf2image import convert_from_path
 import docx2txt
 
+
 def extract_text_and_links_from_file(file_path):
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"File not found: {file_path}")
@@ -32,10 +33,11 @@ def extract_text_and_links_from_file(file_path):
         text, links = extract_text_and_links_from_image(file_path)
     else:
         raise ValueError(f"Unsupported file format: {file_extension}")
-    
+
     # Clean the extracted text
     cleaned_text = clean_text(text)
     return cleaned_text, links
+
 
 def extract_text_and_links_from_pdf_ocr(pdf_path):
     """Extracts text from PDF using OCR for image-based PDFs."""
@@ -49,21 +51,23 @@ def extract_text_and_links_from_pdf_ocr(pdf_path):
             page_text = pytesseract.image_to_string(image)
             text += page_text + "\n"
             # Extract links from the OCR text
-            page_links = re.findall(r'https?://\S+', page_text)
+            page_links = re.findall(r"https?://\S+", page_text)
             links.extend(page_links)
     except Exception as e:
         raise RuntimeError(f"Error during PDF OCR extraction: {e}")
     return text, links
+
 
 def extract_text_and_links_from_image(image_path):
     """Extracts text from image files using OCR."""
     try:
         img = Image.open(image_path)
         text = pytesseract.image_to_string(img)
-        links = re.findall(r'https?://\S+', text)
+        links = re.findall(r"https?://\S+", text)
         return text, links
     except Exception as e:
         raise RuntimeError(f"Error extracting text from image: {e}")
+
 
 def extract_text_and_links_from_pdf(pdf_path):
     text = ""
@@ -92,6 +96,7 @@ def extract_text_and_links_from_pdf(pdf_path):
     except Exception as e:
         raise RuntimeError(f"Error during PDF extraction: {e}")
     return text, links
+
 
 def extract_text_and_links_from_docx(docx_path):
     import re
@@ -146,21 +151,23 @@ def extract_text_and_links_from_docx(docx_path):
     combined_text = "\n".join(deduped_lines)
 
     # Also extract any additional links from the secondary text
-    extra_links = re.findall(r'https?://\S+', text_secondary)
+    extra_links = re.findall(r"https?://\S+", text_secondary)
     links.extend(extra_links)
     links = list(set(links))  # Remove duplicates
 
     return combined_text, links
 
+
 def extract_text_and_links_from_txt(txt_path):
     try:
         with open(txt_path, "r", encoding="utf-8") as file:
             text = file.read()
-            links = re.findall(r'(https?://\S+)', text)
+            links = re.findall(r"(https?://\S+)", text)
             return text, links
     except Exception as e:
         raise RuntimeError(f"Error extracting text from TXT: {e}")
-    
+
+
 def clean_text(text):
     """
     Cleans the extracted text by removing bullet points and other formatting artifacts,
@@ -169,23 +176,26 @@ def clean_text(text):
     cleaned_lines = []
     for line in text.splitlines():
         # Remove bullet points like '-', '*', '•', '▪', etc.
-        cleaned_line = re.sub(r'^(\s*[-*•▪]\s+)', '', line)
+        cleaned_line = re.sub(r"^(\s*[-*•▪]\s+)", "", line)
         # Optionally, remove numbering (e.g., '1. ', '2) ', etc.)
-        cleaned_line = re.sub(r'^(\s*\d+[\.\)]\s+)', '', cleaned_line)
-        
+        cleaned_line = re.sub(r"^(\s*\d+[\.\)]\s+)", "", cleaned_line)
+
         # Replace multiple spaces with a single space within the line
-        cleaned_line = re.sub(r'[ \t]+', ' ', cleaned_line)
-        
+        cleaned_line = re.sub(r"[ \t]+", " ", cleaned_line)
+
         # Strip leading/trailing whitespace from the line itself
         cleaned_line = cleaned_line.strip()
-        
+
         cleaned_lines.append(cleaned_line)
-    
+
     # Join the cleaned lines back into a single string, preserving original newlines
     # and filter out empty lines that might result from cleaning.
-    cleaned_text = '\n'.join(line for line in cleaned_lines if line) # Filter out empty lines
-    
-    return cleaned_text.strip() # Final strip for the whole block
+    cleaned_text = "\n".join(
+        line for line in cleaned_lines if line
+    )  # Filter out empty lines
+
+    return cleaned_text.strip()  # Final strip for the whole block
+
 
 def save_text_and_links_to_file(text, links, output_file_path):
     try:
@@ -198,22 +208,31 @@ def save_text_and_links_to_file(text, links, output_file_path):
     except Exception as e:
         raise RuntimeError(f"Error saving text and links to file: {e}")
 
+
 if __name__ == "__main__":
-    file_path = input("Enter the file path for the file to extract text and links from: ").strip()
+    file_path = input(
+        "Enter the file path for the file to extract text and links from: "
+    ).strip()
 
     if not os.path.exists(file_path):
         print(f"File not found: {file_path}")
     else:
         try:
             print("Extracting text and links...")
-            extracted_text, extracted_links = extract_text_and_links_from_file(file_path)
+            extracted_text, extracted_links = extract_text_and_links_from_file(
+                file_path
+            )
 
             print("Extracted Text Preview:")
             print(extracted_text[:500])
             print("\nExtracted Links:")
             print("\n".join(extracted_links))
 
-            output_file_path = os.path.splitext(file_path)[0] + "_extracted_with_links.txt"
-            save_text_and_links_to_file(extracted_text, extracted_links, output_file_path)
+            output_file_path = (
+                os.path.splitext(file_path)[0] + "_extracted_with_links.txt"
+            )
+            save_text_and_links_to_file(
+                extracted_text, extracted_links, output_file_path
+            )
         except Exception as e:
             print(f"An error occurred: {e}")

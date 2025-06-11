@@ -31,7 +31,7 @@ Joblo consists of two main components:
 
 1. Clone the repository:
    ```
-   git clone https://github.com/yourusername/joblo.git
+   git clone https://github.com/siddarth24/joblo.git
    cd joblo
    ```
 
